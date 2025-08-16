@@ -54,6 +54,13 @@ Or install from a requirements file:
 pip install -r requirements.txt
 ```
 
+#### Development Dependencies (Optional)
+For code formatting and quality tools:
+```bash
+pip install -r requirements-dev.txt
+pre-commit install
+```
+
 **requirements.txt:**
 ```
 pandas>=1.5.0
@@ -190,7 +197,7 @@ ERROR: Core data verification failed!
 ```
 Error: Port 8501 is already in use
 ```
-**Solution:** 
+**Solution:**
 - Close other Streamlit instances
 - Or specify a different port: `streamlit run stock_dashboard.py --server.port 8502`
 

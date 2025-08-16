@@ -5,9 +5,9 @@ Stock Analysis Runner
 Runs the stock indexer script first, then launches the Streamlit dashboard.
 """
 
+import os
 import subprocess
 import sys
-import os
 import time
 from pathlib import Path
 
@@ -40,7 +40,9 @@ def run_stock_indexer():
         print("Running stock_indexer.py...")
         result = subprocess.run(
             [sys.executable, "stock_indexer.py"],
-            capture_output=True, text=True, check=True
+            capture_output=True,
+            text=True,
+            check=True,
         )
 
         # Print the output from the indexer
@@ -107,12 +109,7 @@ def check_dependencies():
     """Check if required packages are installed"""
     print("Checking dependencies...")
 
-    required_packages = [
-        'pandas',
-        'streamlit',
-        'plotly',
-        'numpy'
-    ]
+    required_packages = ["pandas", "streamlit", "plotly", "numpy"]
 
     missing_packages = []
 
@@ -151,7 +148,7 @@ def main():
         "stock_indexer.py",
         "stock_dashboard.py",
         "StockData.xlsx",
-        "StockData_Indexed.xlsx"
+        "StockData_Indexed.xlsx",
     ]:
         status = "✓" if check_file_exists(file) else "✗"
         print(f"  {status} {file}")
@@ -174,9 +171,11 @@ def main():
 
     # Ask user if they want to proceed to dashboard
     print("\n" + "=" * 60)
-    response = input("Stock indexing completed! Launch dashboard? (y/n): ").lower().strip()
+    response = (
+        input("Stock indexing completed! Launch dashboard? (y/n): ").lower().strip()
+    )
 
-    if response in ['y', 'yes', '']:
+    if response in ["y", "yes", ""]:
         # Step 2: Launch the dashboard
         launch_dashboard()
     else:

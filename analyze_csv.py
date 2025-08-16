@@ -8,8 +8,19 @@ import re
 from typing import Set, Dict, List, Tuple
 
 def normalize_symbol(symbol: str) -> str:
-    """Normalize ticker symbols for mapping (e.g., BRK/B -> BRK_B)."""
-    return symbol.replace("/", "_").upper()
+    """Normalize ticker symbols for mapping (e.g., BRK/B -> BRK.B)."""
+    try:
+        # Use the same normalization as stock_classifications
+        from stock_classifications import normalize_symbol as official_normalize
+        return official_normalize(symbol)
+    except ImportError:
+        # Fallback implementation
+        if not symbol or not isinstance(symbol, str):
+            return symbol
+        cleaned = symbol.strip().upper()
+        if cleaned.startswith('BRK') and len(cleaned) == 5 and cleaned[3] in ['/', '_', '.']:
+            return 'BRK.B'
+        return cleaned.replace('/', '.').replace('_', '.')
 
 def normalize_enum_name(name: str) -> str:
     """Convert a name to enum format (uppercase with underscores)."""
@@ -73,63 +84,24 @@ def parse_csv_file(csv_path: str) -> List[Dict[str, str]]:
 
 def get_existing_classifications():
     """Get existing classifications from the current file."""
-    existing_symbols = {
-        'AAL', 'AAPL', 'ABBV', 'ACN', 'ADSK', 'AKAM', 'AMGN', 'AMZN', 'AVGO', 'AXP',
-        'BA', 'BAC', 'BLK', 'BMY', 'BRK_B', 'CAT', 'CCI', 'CCL', 'CHTR', 'CL', 'CMCSA',
-        'COF', 'COP', 'COST', 'CRM', 'CSCO', 'CVS', 'CVX', 'DFS', 'DHR', 'DIS', 'EBAY',
-        'ETN', 'EXC', 'F', 'FCX', 'FDX', 'GD', 'GE', 'GILD', 'GM', 'GOOGL', 'GS', 'HAL',
-        'HD', 'HUM', 'IBM', 'INTC', 'ISRG', 'JNJ', 'JPM', 'KHC', 'KO', 'LHX', 'LLY',
-        'LMT', 'LOW', 'MA', 'MCD', 'MDLZ', 'MDT', 'MET', 'META', 'MMM', 'MO', 'MRK',
-        'MS', 'MSFT', 'NEE', 'NFLX', 'NKE', 'NOW', 'NSC', 'NVDA', 'ORCL', 'PEP', 'PFE',
-        'PG', 'PM', 'PYPL', 'QCOM', 'RTX', 'SBUX', 'SLB', 'SO', 'SPGI', 'SYK', 'T',
-        'TGT', 'TMO', 'TSLA', 'TSM', 'TXN', 'UNH', 'UNP', 'UPS', 'V', 'VZ', 'WFC',
-        'WMT', 'XOM'
-    }
-    
-    existing_sectors = {
-        'Communication Services', 'Consumer Discretionary', 'Consumer Staples', 'Energy',
-        'Financials', 'Health Care', 'Industrials', 'Information Technology', 'Materials',
-        'Utilities'
-    }
-    
-    existing_industries = {
-        'Aerospace & Defense', 'Automobiles', 'Banks', 'Beverages', 'Biotechnology',
-        'Broadline Retail', 'Capital Markets', 'Chemicals', 'Communications Equipment',
-        'Construction Materials', 'Consumer Finance', 'Consumer Staples Distribution & Retail',
-        'Diversified Telecommunication Services', 'Electric Utilities', 'Electrical Equipment',
-        'Electronic Equipment, Instruments & Components', 'Food Products',
-        'Health Care Equipment & Supplies', 'Hotels, Restaurants & Leisure', 'Household Durables',
-        'Household Products', 'Industrial Conglomerates', 'Insurance', 'Interactive Media & Services',
-        'IT Services', 'Life Sciences Tools & Services', 'Machinery', 'Media', 'Metals & Mining',
-        'Multiline Retail', 'Oil, Gas & Consumable Fuels', 'Passenger Airlines', 'Personal Products',
-        'Pharmaceuticals', 'Real Estate Management & Development', 'Road & Rail',
-        'Semiconductors & Semiconductor Equipment', 'Software', 'Specialty Retail',
-        'Technology Hardware, Storage & Peripherals', 'Textiles, Apparel & Luxury Goods'
-    }
-    
-    existing_sub_industries = {
-        'Aerospace & Defense', 'Apparel Retail', 'Apparel, Accessories & Luxury Goods',
-        'Application Software', 'Asset Management & Custody Banks', 'Automobile Manufacturers',
-        'Automotive Retail', 'Biotechnology', 'Broadline Retail', 'Cable & Satellite',
-        'Casinos & Gaming', 'Communications Equipment', 'Construction Machinery & Heavy Transportation Equipment',
-        'Construction Materials', 'Consumer Electronics', 'Consumer Finance',
-        'Consumer Staples Distribution & Retail', 'Diversified Banks', 'Drug Retail',
-        'Electric Utilities', 'Electrical Components & Equipment', 'Electronic Equipment, Instruments & Components',
-        'Food Distributors', 'Food Products', 'Health Care Distributors', 'Health Care Equipment',
-        'Health Care Services', 'Health Care Supplies', 'Home Improvement Retail', 'Homebuilding',
-        'Hotels, Resorts & Cruise Lines', 'Household Products', 'Industrial Conglomerates',
-        'Integrated Oil & Gas', 'Interactive Media & Services', 'Internet Services & Infrastructure',
-        'Investment Banking & Brokerage', 'IT Consulting & Other Services', 'Life Sciences Tools & Services',
-        'Machinery', 'Movies & Entertainment', 'Multi-Sector Holdings', 'Multiline Insurance',
-        'Oil & Gas Equipment & Services', 'Oil & Gas Exploration & Production', 'Oil & Gas Refining & Marketing',
-        'Packaged Foods & Meats', 'Passenger Airlines', 'Personal Products', 'Pharmaceuticals',
-        'Precious Metals & Minerals', 'Property & Casualty Insurance', 'Railroads',
-        'Real Estate Services', 'Restaurants', 'Semiconductors', 'Soft Drinks',
-        'Specialized Finance', 'Steel', 'Systems Software', 'Technology Hardware, Storage & Peripherals',
-        'Wireless Telecommunication Services'
-    }
-    
-    return existing_symbols, existing_sectors, existing_industries, existing_sub_industries
+    try:
+        from stock_classifications import StockSymbol, Sector, Industry, SubIndustry
+        
+        # Get both the enum names and values for symbols to handle normalization
+        existing_symbol_values = set(symbol.value for symbol in StockSymbol)
+        existing_symbol_names = set(symbol.name for symbol in StockSymbol)
+        
+        # Create a set that includes both normalized and original formats
+        existing_symbols = existing_symbol_values.union(existing_symbol_names)
+        
+        existing_sectors = set(sector.value for sector in Sector)
+        existing_industries = set(industry.value for industry in Industry)
+        existing_sub_industries = set(sub_industry.value for sub_industry in SubIndustry)
+        
+        return existing_symbols, existing_sectors, existing_industries, existing_sub_industries
+    except ImportError:
+        # Fallback to empty sets if stock_classifications can't be imported
+        return set(), set(), set(), set()
 
 def main():
     csv_path = '/Users/dgonzalez/Library/CloudStorage/GoogleDrive-danrgonzalez@gmail.com/My Drive/GDrive/python/StockInsights/2025-08-15-Quote.csv'

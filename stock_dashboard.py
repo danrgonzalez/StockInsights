@@ -348,6 +348,7 @@ def main():
 
         # Calculate rolling averages for all tickers
         rolling_summary_data = []
+        missing_classifications = []
 
         for ticker in available_tickers:
             ticker_data = df[df['Ticker'] == ticker].copy()
@@ -363,10 +364,11 @@ def main():
                         classification.sub_industry.value
                     )
                 else:
-                    print(f"Missing classification for ticker: {ticker}")  # <--- Add this line
-                    ticker_summary['Sector'] = "Unknown"
-                    ticker_summary['Industry'] = "Unknown"
-                    ticker_summary['Sub_Industry'] = "Unknown"
+                    # Track missing classifications for optional display
+                    missing_classifications.append(ticker)
+                    ticker_summary['Sector'] = "Unclassified"
+                    ticker_summary['Industry'] = "Unclassified"
+                    ticker_summary['Sub_Industry'] = "Unclassified"
             else:
                 ticker_summary['Sector'] = "N/A"
                 ticker_summary['Industry'] = "N/A"
@@ -549,6 +551,15 @@ def main():
                 hide_index=True,
                 column_config=column_config
             )
+            
+            # Show information about missing classifications if any
+            if CLASSIFICATIONS_AVAILABLE and missing_classifications:
+                with st.expander(f"ℹ️ Data Quality Info - {len(missing_classifications)} ticker(s) missing classifications"):
+                    st.info(
+                        f"The following {len(missing_classifications)} ticker(s) are marked as 'Unclassified' "
+                        f"because they don't have sector/industry classifications in the system:"
+                    )
+                    st.write(", ".join(sorted(missing_classifications)))
 
             # Add sector analysis if classifications are available
             if (
@@ -561,7 +572,7 @@ def main():
                 # Create sector summary statistics
                 sector_stats = []
                 for sector in filtered_rolling_df['Sector'].unique():
-                    if sector != "Unknown":
+                    if sector not in ["Unknown", "Unclassified", "N/A"]:
                         sector_data = filtered_rolling_df[
                             filtered_rolling_df['Sector'] == sector
                         ]

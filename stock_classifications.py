@@ -1061,12 +1061,23 @@ def get_stock_classification(symbol):
     # type: (str) -> Optional[StockClassification]
     """
     Get the classification for a given stock symbol.
+    
+    Args:
+        symbol: Stock ticker symbol (will be cleaned and normalized)
+        
+    Returns:
+        StockClassification if found, None otherwise
     """
+    if not symbol or not isinstance(symbol, str):
+        return None
+        
     try:
-        normalized = normalize_symbol(symbol)
+        # Clean and normalize the symbol
+        cleaned_symbol = symbol.strip().upper()
+        normalized = normalize_symbol(cleaned_symbol)
         stock_symbol = StockSymbol(normalized)
         return STOCK_CLASSIFICATIONS.get(stock_symbol)
-    except ValueError:
+    except (ValueError, AttributeError):
         return None
 
 
@@ -1122,8 +1133,31 @@ def get_stocks_by_sub_industry(sub_industry):
 
 
 def normalize_symbol(symbol: str) -> str:
-    """Normalize ticker symbols for mapping (e.g., BRK/B -> BRK_B)."""
-    return symbol.replace("/", "_").upper()
+    """
+    Normalize ticker symbols for mapping to handle various formats.
+    
+    Examples:
+        BRK/B -> BRK.B
+        BRK.B -> BRK.B  
+        BRK_B -> BRK.B
+        brk/b -> BRK.B
+    """
+    if not symbol or not isinstance(symbol, str):
+        return symbol
+        
+    # Clean whitespace and convert to upper
+    cleaned = symbol.strip().upper()
+    
+    # Handle BRK special case - normalize all variants to BRK.B
+    if cleaned.startswith('BRK') and len(cleaned) == 5:
+        if cleaned[3] in ['/', '_', '.']:
+            return 'BRK.B'
+    
+    # For other symbols, replace slashes and underscores with dots for consistency
+    # This maintains compatibility while standardizing format
+    normalized = cleaned.replace('/', '.').replace('_', '.')
+    
+    return normalized
 
 
 # Example usage and validation

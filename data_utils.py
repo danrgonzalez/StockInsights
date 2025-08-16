@@ -12,11 +12,30 @@ def load_data(file_path):
         for col in numeric_columns:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce')
-        # Clean any remaining whitespace issues
+        # Clean and normalize ticker symbols to prevent duplicates
+        if 'Ticker' in df.columns:
+            # Import normalization function if available
+            try:
+                from stock_classifications import normalize_symbol
+                df['Ticker'] = df['Ticker'].astype(str).apply(normalize_symbol)
+            except ImportError:
+                # Fallback to basic cleaning
+                df['Ticker'] = df['Ticker'].astype(str).str.strip().str.upper()
+            
+        # Clean other text columns
         for col in df.select_dtypes(include=['object']).columns:
             if col not in ['Ticker', 'Report']:
                 df[col] = df[col].astype(str).str.strip()
                 df[col] = df[col].replace('', np.nan)
+                
+        # Check for and warn about duplicate tickers after cleaning
+        if 'Ticker' in df.columns:
+            original_count = len(df)
+            df_clean = df.drop_duplicates(subset=['Ticker', 'Report'], keep='first')
+            dropped_count = original_count - len(df_clean)
+            if dropped_count > 0:
+                st.warning(f"Removed {dropped_count} duplicate ticker/report combinations during data cleaning")
+                df = df_clean
         return df
     except FileNotFoundError:
         st.error(f"File not found: {file_path}")

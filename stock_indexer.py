@@ -1,15 +1,102 @@
+import numpy as np
 import pandas as pd
 
 
-def process_stock_data(file_path):
+def load_csv_simple_moving_avg(csv_path):
+    """
+    Load SimpleMovingAvg data from CSV file.
+
+    Args:
+        csv_path (str): Path to the CSV file
+
+    Returns:
+        dict: Mapping of ticker to SimpleMovingAvg value
+    """
+    print(f"Loading SimpleMovingAvg data from {csv_path}...")
+
+    try:
+        # Read CSV file, skipping the first few lines to get to the header
+        with open(csv_path, "r", encoding="utf-8-sig") as file:
+            lines = file.readlines()
+
+        # Find the header line containing "Symbol,SimpleMovingAvg..."
+        header_line_idx = None
+        for i, line in enumerate(lines):
+            if line.strip().startswith("Symbol,") and "SimpleMovingAvg" in line:
+                header_line_idx = i
+                break
+
+        if header_line_idx is None:
+            raise ValueError("Could not find proper CSV header line")
+
+        # Use the remaining lines starting from header as a new file-like object
+        from io import StringIO
+
+        csv_content = "".join(lines[header_line_idx:])
+        csv_file = StringIO(csv_content)
+
+        # Read the CSV data
+        df = pd.read_csv(csv_file)
+
+        # Create mapping of ticker to SimpleMovingAvg
+        sma_mapping = {}
+        for _, row in df.iterrows():
+            symbol = str(row.get("Symbol", "")).strip()
+            sma_value = row.get("SimpleMovingAvg", np.nan)
+
+            # Skip if symbol is empty or SMA value is not valid
+            if not symbol or pd.isna(sma_value):
+                continue
+
+            # Try to convert to float, skip if it fails
+            try:
+                sma_float = float(sma_value)
+                if np.isnan(sma_float) or np.isinf(sma_float):
+                    continue
+            except (ValueError, TypeError):
+                # Skip non-numeric values like "loading"
+                continue
+
+            # Normalize symbol like in stock_classifications
+            try:
+                from stock_classifications import normalize_symbol
+
+                normalized_symbol = normalize_symbol(symbol)
+            except ImportError:
+                # Fallback normalization
+                normalized_symbol = symbol.strip().upper()
+                if (
+                    normalized_symbol.startswith("BRK")
+                    and len(normalized_symbol) == 5
+                    and normalized_symbol[3] in ["/", "_", "."]
+                ):
+                    normalized_symbol = "BRK.B"
+                normalized_symbol = normalized_symbol.replace("/", ".").replace(
+                    "_", "."
+                )
+
+            sma_mapping[normalized_symbol] = sma_float
+
+        print(f"Loaded SimpleMovingAvg data for {len(sma_mapping)} tickers")
+        return sma_mapping
+
+    except Exception as e:
+        print(f"Error loading CSV file: {str(e)}")
+        return {}
+
+
+def process_stock_data(file_path, csv_path=None):
     """
     Read Excel file and add reverse index to each ticker's data.
     Each ticker gets its own independent index from 1 to N
     (where N = number of records for that ticker).
     The most recent record for each ticker gets the highest index.
 
+    Optionally updates latest Price values with SimpleMovingAvg from CSV.
+
     Args:
         file_path (str): Path to the Excel file
+        csv_path (str, optional): Path to CSV file with SimpleMovingAvg data
 
     Returns:
         pandas.DataFrame: Processed dataframe with reverse index column named 'Index'
@@ -18,6 +105,11 @@ def process_stock_data(file_path):
     df = pd.read_excel(file_path)
     print(f"Total rows: {len(df)}")
     print(f"Columns: {list(df.columns)}")
+
+    # Load CSV data if provided
+    sma_mapping = {}
+    if csv_path:
+        sma_mapping = load_csv_simple_moving_avg(csv_path)
 
     print("Adding reverse index to each ticker...")
 
@@ -30,6 +122,63 @@ def process_stock_data(file_path):
         return pd.Series(range(start_index, end_index), index=group.index)
 
     df["Index"] = df.groupby("Ticker", sort=False).apply(add_ticker_index).values
+
+    # Update latest Price values with SimpleMovingAvg if available
+    if sma_mapping and "Price" in df.columns:
+        print(
+            f"Updating latest Price values with SimpleMovingAvg for {len(sma_mapping)} tickers..."
+        )
+
+        updated_count = 0
+        for ticker in df["Ticker"].unique():
+            # Normalize ticker symbol for matching
+            try:
+                from stock_classifications import normalize_symbol
+
+                normalized_ticker = normalize_symbol(ticker)
+            except ImportError:
+                # Fallback normalization
+                normalized_ticker = ticker.strip().upper()
+                if (
+                    normalized_ticker.startswith("BRK")
+                    and len(normalized_ticker) == 5
+                    and normalized_ticker[3] in ["/", "_", "."]
+                ):
+                    normalized_ticker = "BRK.B"
+                normalized_ticker = normalized_ticker.replace("/", ".").replace(
+                    "_", "."
+                )
+
+            if normalized_ticker in sma_mapping:
+                # Find the latest record for this ticker (highest index)
+                ticker_mask = df["Ticker"] == ticker
+                ticker_data = df[ticker_mask]
+                latest_idx_row = ticker_data[
+                    ticker_data["Index"] == ticker_data["Index"].max()
+                ]
+
+                if not latest_idx_row.empty:
+                    latest_row_idx = latest_idx_row.index[0]
+                    old_price = df.loc[latest_row_idx, "Price"]
+                    new_price = sma_mapping[normalized_ticker]
+
+                    df.loc[latest_row_idx, "Price"] = new_price
+                    updated_count += 1
+                    print(
+                        f"  {ticker}: Updated latest Price from {old_price} to {new_price}"
+                    )
+
+        print(f"Updated Price for {updated_count} tickers with SimpleMovingAvg data")
+        if updated_count < len(sma_mapping):
+            print(
+                f"Note: {len(sma_mapping) - updated_count} tickers from CSV not found in Excel data"
+            )
+    elif sma_mapping and "Price" not in df.columns:
+        print(
+            "Warning: CSV data loaded but no 'Price' column found in Excel data to update"
+        )
+    elif csv_path:
+        print("Warning: CSV file provided but no SimpleMovingAvg data could be loaded")
 
     remaining_cols = [
         col
@@ -95,7 +244,7 @@ def process_stock_data(file_path):
     return df_indexed
 
 
-def verify_core_data_integrity(original_df, processed_df):
+def verify_core_data_integrity(original_df, processed_df, exclude_price_check=False):
     """
     Verify that core data columns were not changed.
     Only checks: Ticker, Report, EPS, Revenue, Price, and DivAmt
@@ -103,12 +252,19 @@ def verify_core_data_integrity(original_df, processed_df):
     Args:
         original_df (pandas.DataFrame): Original dataframe
         processed_df (pandas.DataFrame): Processed dataframe with index column
+        exclude_price_check (bool): Skip Price column verification if True
 
     Returns:
         bool: True if core data integrity is maintained
     """
     print("\n=== CORE DATA VERIFICATION ===")
     core_columns = ["Ticker", "Report", "EPS", "Revenue", "Price", "DivAmt"]
+
+    if exclude_price_check:
+        print(
+            "INFO: Skipping Price column verification (updated with SimpleMovingAvg data)"
+        )
+        core_columns.remove("Price")
 
     if len(original_df) != len(processed_df):
         print(
@@ -205,6 +361,7 @@ def save_processed_data(df, output_path):
 
 def main():
     input_file = "StockData.xlsx"
+    csv_file = "quotes/2025-08-15-Quote.csv"
     output_file = "StockData_Indexed.xlsx"
 
     try:
@@ -223,14 +380,18 @@ def main():
             print("No unnamed columns found in original")
             original_df = original_df_raw
 
-        processed_df = process_stock_data(input_file)
+        processed_df = process_stock_data(input_file, csv_file)
         if processed_df is None:
             print("\nERROR: Processing failed due to index issues! Stopping execution.")
             return
 
         print(f"Final processed columns: {list(processed_df.columns)}")
 
-        if not verify_core_data_integrity(original_df, processed_df):
+        # Skip Price column verification if we updated it with CSV data
+        exclude_price_check = csv_file is not None
+        if not verify_core_data_integrity(
+            original_df, processed_df, exclude_price_check
+        ):
             print("\nERROR: Core data verification failed! Stopping execution.")
             return
 

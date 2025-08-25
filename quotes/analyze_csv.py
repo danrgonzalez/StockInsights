@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Script to analyze CSV data and compare with existing stock classifications
 """
@@ -12,6 +11,10 @@ def normalize_symbol(symbol: str) -> str:
     """Normalize ticker symbols for mapping (e.g., BRK/B -> BRK.B)."""
     try:
         # Use the same normalization as stock_classifications
+        import os
+        import sys
+
+        sys.path.append(os.path.dirname(os.path.dirname(__file__)))
         from stock_classifications import normalize_symbol as official_normalize
 
         return official_normalize(symbol)
@@ -106,6 +109,10 @@ def parse_csv_file(csv_path: str) -> List[Dict[str, str]]:
 def get_existing_classifications():
     """Get existing classifications from the current file."""
     try:
+        import os
+        import sys
+
+        sys.path.append(os.path.dirname(os.path.dirname(__file__)))
         from stock_classifications import Industry, Sector, StockSymbol, SubIndustry
 
         # Get both the enum names and values for symbols to handle normalization
@@ -133,10 +140,7 @@ def get_existing_classifications():
 
 
 def main():
-    csv_path = (
-        "/Users/dgonzalez/Library/CloudStorage/GoogleDrive-danrgonzalez@gmail.com/"
-        "My Drive/GDrive/python/StockInsights/2025-08-15-Quote.csv"
-    )
+    csv_path = "2025-08-15-Quote.csv"
 
     # Parse CSV data
     csv_stocks = parse_csv_file(csv_path)

@@ -15,8 +15,15 @@ except ImportError:
         "Classification data will not be available."
     )
 
-from charts import create_comparison_chart, create_metric_chart, create_qoq_chart
-from data_utils import calculate_qoq_changes, load_data
+from charts import (
+    create_comparison_chart,
+    create_eps_prediction_chart,
+    create_eps_ttm_prediction_chart,
+    create_metric_chart,
+    create_price_prediction_chart,
+    create_qoq_chart,
+)
+from data_utils import calculate_qoq_changes, load_data, predict_next_eps
 from ui_components import display_summary_stats
 
 # MUST be the very first Streamlit command
@@ -118,6 +125,297 @@ def main():
             else:
                 st.info("No EPS data available for this ticker")
 
+        # EPS Prediction Section
+        st.subheader("🔮 EPS Prediction")
+        prediction = predict_next_eps(df, selected_ticker)
+        if prediction:
+            # Three-scenario display
+            st.markdown("**Next Quarter EPS Scenarios:**")
+            col_worst, col_base, col_best = st.columns(3)
+
+            with col_worst:
+                st.metric(
+                    "🔴 Worst Case",
+                    f"${prediction['worst_case_eps']:.2f}",
+                    f"{prediction['worst_case_growth']:+.1f}%",
+                    delta_color="inverse",
+                )
+
+            with col_base:
+                st.metric(
+                    "⭐ Base Case",
+                    f"${prediction['predicted_eps']:.2f}",
+                    f"{prediction['predicted_growth']:+.1f}%",
+                )
+
+            with col_best:
+                st.metric(
+                    "🟢 Best Case",
+                    f"${prediction['best_case_eps']:.2f}",
+                    f"{prediction['best_case_growth']:+.1f}%",
+                    delta_color="normal",
+                )
+
+            # Additional metrics row
+            col_current, col_confidence, col_volatility = st.columns(3)
+            with col_current:
+                st.metric("Current EPS", f"${prediction['latest_eps']:.2f}")
+
+            with col_confidence:
+                confidence_color = {"High": "🟢", "Medium": "🟡", "Low": "🔴"}
+                st.metric(
+                    "Confidence Level",
+                    f"{confidence_color.get(prediction['confidence'], '⚪')} {prediction['confidence']}",
+                )
+
+            with col_volatility:
+                st.metric("Volatility (±1σ)", f"{prediction['volatility']:.1f}%")
+
+            # Scenario range summary
+            range_span = prediction["best_case_eps"] - prediction["worst_case_eps"]
+            range_pct = (
+                (range_span / prediction["predicted_eps"]) * 100
+                if prediction["predicted_eps"] != 0
+                else 0
+            )
+
+            st.info(
+                f"📊 **Scenario Range**: ${prediction['worst_case_eps']:.2f} to ${prediction['best_case_eps']:.2f} "
+                f"(${range_span:.2f} spread, {range_pct:.0f}% of base case)"
+            )
+
+            # Enhanced EPS chart with all scenarios
+            eps_pred_chart = create_eps_prediction_chart(df, selected_ticker)
+            if eps_pred_chart:
+                st.plotly_chart(eps_pred_chart, use_container_width=True)
+
+            # Methodology details in expander
+            with st.expander("📊 Prediction Methodology & Statistics"):
+                col_method1, col_method2 = st.columns(2)
+
+                with col_method1:
+                    st.write("**Methodology:**")
+                    st.write(f"• {prediction['methodology']}")
+                    st.write(f"• Data Points: {prediction['data_points']} quarters")
+                    st.write(f"• Recent 4Q Growth: {prediction['growth_4q']:.1f}%")
+                    if prediction["growth_8q"] is not None:
+                        st.write(f"• Recent 8Q Growth: {prediction['growth_8q']:.1f}%")
+                        st.write("• Weighting: 70% recent + 30% long-term")
+
+                with col_method2:
+                    st.write("**Statistical Analysis:**")
+                    st.write(f"• 4Q Std Dev: {prediction['std_4q']:.1f}%")
+                    if prediction["std_8q"] is not None:
+                        st.write(f"• 8Q Std Dev: {prediction['std_8q']:.1f}%")
+                    st.write(f"• Combined Volatility: {prediction['volatility']:.1f}%")
+                    st.write("• Scenarios: Base ±1σ volatility")
+
+                st.markdown("**Scenario Interpretation:**")
+                st.markdown(
+                    "• **Best Case**: Historical volatility suggests upside potential"
+                )
+                st.markdown(
+                    "• **Base Case**: Most likely outcome based on recent trends"
+                )
+                st.markdown(
+                    "• **Worst Case**: Downside risk based on historical volatility"
+                )
+        else:
+            st.info(
+                "Insufficient historical data for EPS prediction (requires at least 4 quarters)"
+            )
+
+        # EPS TTM Prediction Section
+        if prediction and prediction["predicted_eps_ttm"] is not None:
+            st.subheader("📊 EPS TTM Prediction")
+            st.markdown("**Next Quarter Impact on Trailing Twelve Months:**")
+
+            col_ttm_worst, col_ttm_base, col_ttm_best = st.columns(3)
+
+            with col_ttm_worst:
+                st.metric(
+                    "🔴 Worst Case TTM",
+                    f"${prediction['worst_case_eps_ttm']:.2f}",
+                    f"{prediction['worst_case_eps_ttm_growth']:+.1f}%",
+                    delta_color="inverse",
+                )
+
+            with col_ttm_base:
+                st.metric(
+                    "⭐ Base Case TTM",
+                    f"${prediction['predicted_eps_ttm']:.2f}",
+                    f"{prediction['predicted_eps_ttm_growth']:+.1f}%",
+                )
+
+            with col_ttm_best:
+                st.metric(
+                    "🟢 Best Case TTM",
+                    f"${prediction['best_case_eps_ttm']:.2f}",
+                    f"{prediction['best_case_eps_ttm_growth']:+.1f}%",
+                    delta_color="normal",
+                )
+
+            # Current TTM for comparison
+            col_current_ttm, col_ttm_range = st.columns(2)
+            with col_current_ttm:
+                st.metric("Current EPS TTM", f"${prediction['current_eps_ttm']:.2f}")
+
+            with col_ttm_range:
+                ttm_range_span = (
+                    prediction["best_case_eps_ttm"] - prediction["worst_case_eps_ttm"]
+                )
+                ttm_range_pct = (
+                    (ttm_range_span / prediction["predicted_eps_ttm"]) * 100
+                    if prediction["predicted_eps_ttm"] != 0
+                    else 0
+                )
+                st.metric(
+                    "TTM Range Spread", f"${ttm_range_span:.2f} ({ttm_range_pct:.0f}%)"
+                )
+
+            # TTM Impact explanation
+            st.info(
+                f"📈 **TTM Impact**: The predicted quarter will replace the oldest quarter in the TTM calculation, "
+                f"potentially changing annual earnings by {prediction['predicted_eps_ttm_growth']:+.1f}% in the base case scenario."
+            )
+
+            # Enhanced EPS TTM chart with all scenarios
+            eps_ttm_pred_chart = create_eps_ttm_prediction_chart(df, selected_ticker)
+            if eps_ttm_pred_chart:
+                st.plotly_chart(eps_ttm_pred_chart, use_container_width=True)
+
+            with st.expander("📊 EPS TTM Calculation Details"):
+                st.markdown("**TTM Prediction Method:**")
+                st.markdown("• TTM = Sum of last 4 quarters of EPS")
+                st.markdown(
+                    "• Prediction replaces oldest quarter with forecasted quarter"
+                )
+                st.markdown(
+                    "• Shows annual earnings impact of next quarter performance"
+                )
+                st.markdown("• Scenarios based on quarterly prediction volatility")
+
+                if len(df[df["Ticker"] == selected_ticker]["EPS"].dropna()) >= 4:
+                    recent_quarters = (
+                        df[df["Ticker"] == selected_ticker]["EPS"].dropna().tail(4)
+                    )
+                    st.markdown(f"**Current TTM Components:**")
+                    st.markdown(
+                        f"• Last 4 quarters: ${recent_quarters.iloc[0]:.2f} + ${recent_quarters.iloc[1]:.2f} + ${recent_quarters.iloc[2]:.2f} + ${recent_quarters.iloc[3]:.2f} = ${recent_quarters.sum():.2f}"
+                    )
+                    st.markdown(f"**Predicted TTM Components:**")
+                    st.markdown(
+                        f"• Next TTM: ${recent_quarters.iloc[1]:.2f} + ${recent_quarters.iloc[2]:.2f} + ${recent_quarters.iloc[3]:.2f} + ${prediction['predicted_eps']:.2f} = ${prediction['predicted_eps_ttm']:.2f}"
+                    )
+
+        # Price Prediction Section
+        if prediction and prediction["predicted_price"] is not None:
+            st.subheader("💰 Price Prediction")
+            st.markdown(
+                "**Multiple-Based Price Scenarios (Current P/E × Predicted EPS TTM):**"
+            )
+
+            col_price_worst, col_price_base, col_price_best = st.columns(3)
+
+            with col_price_worst:
+                st.metric(
+                    "🔴 Worst Case Price",
+                    f"${prediction['worst_case_price']:.2f}",
+                    f"{prediction['worst_case_price_growth']:+.1f}%",
+                    delta_color="inverse",
+                )
+
+            with col_price_base:
+                st.metric(
+                    "⭐ Base Case Price",
+                    f"${prediction['predicted_price']:.2f}",
+                    f"{prediction['predicted_price_growth']:+.1f}%",
+                )
+
+            with col_price_best:
+                st.metric(
+                    "🟢 Best Case Price",
+                    f"${prediction['best_case_price']:.2f}",
+                    f"{prediction['best_case_price_growth']:+.1f}%",
+                    delta_color="normal",
+                )
+
+            # Additional price metrics
+            col_current_price, col_current_pe, col_price_range = st.columns(3)
+            with col_current_price:
+                st.metric("Current Price", f"${prediction['current_price']:.2f}")
+
+            with col_current_pe:
+                st.metric(
+                    "Current P/E Multiple", f"{prediction['current_multiple']:.1f}x"
+                )
+
+            with col_price_range:
+                price_range_span = (
+                    prediction["best_case_price"] - prediction["worst_case_price"]
+                )
+                price_range_pct = (
+                    (price_range_span / prediction["predicted_price"]) * 100
+                    if prediction["predicted_price"] != 0
+                    else 0
+                )
+                st.metric(
+                    "Price Range Spread",
+                    f"${price_range_span:.2f} ({price_range_pct:.0f}%)",
+                )
+
+            # Price prediction explanation
+            st.info(
+                f"📈 **Multiple-Based Valuation**: Price predictions assume current P/E multiple ({prediction['current_multiple']:.1f}x) "
+                f"remains constant, applied to predicted EPS TTM scenarios. Base case suggests "
+                f"{prediction['predicted_price_growth']:+.1f}% price movement."
+            )
+
+            # Enhanced Price chart with all scenarios
+            price_pred_chart = create_price_prediction_chart(df, selected_ticker)
+            if price_pred_chart:
+                st.plotly_chart(price_pred_chart, use_container_width=True)
+
+            with st.expander("💰 Price Prediction Methodology"):
+                col_price_method1, col_price_method2 = st.columns(2)
+
+                with col_price_method1:
+                    st.write("**Valuation Method:**")
+                    st.write(f"• Price = EPS TTM × P/E Multiple")
+                    st.write(f"• Current P/E: {prediction['current_multiple']:.1f}x")
+                    st.write(f"• Assumes multiple remains constant")
+                    st.write("• Scenarios based on EPS TTM predictions")
+
+                with col_price_method2:
+                    st.write("**Price Calculation:**")
+                    st.write(
+                        f"• Current: ${prediction['current_eps_ttm']:.2f} × {prediction['current_multiple']:.1f}x = ${prediction['current_price']:.2f}"
+                    )
+                    st.write(
+                        f"• Base Case: ${prediction['predicted_eps_ttm']:.2f} × {prediction['current_multiple']:.1f}x = ${prediction['predicted_price']:.2f}"
+                    )
+                    st.write(
+                        f"• Best Case: ${prediction['best_case_eps_ttm']:.2f} × {prediction['current_multiple']:.1f}x = ${prediction['best_case_price']:.2f}"
+                    )
+                    st.write(
+                        f"• Worst Case: ${prediction['worst_case_eps_ttm']:.2f} × {prediction['current_multiple']:.1f}x = ${prediction['worst_case_price']:.2f}"
+                    )
+
+                st.markdown("**Important Assumptions:**")
+                st.markdown(
+                    "• **Constant Multiple**: P/E ratio remains at current levels"
+                )
+                st.markdown("• **EPS-Driven**: Price moves are purely earnings-driven")
+                st.markdown(
+                    "• **No Market Factors**: Excludes sentiment, sector rotation, macro events"
+                )
+                st.markdown(
+                    "• **Historical Basis**: Multiple reflects recent valuation preference"
+                )
+
+        st.markdown("---")
+
+        with col1:
             # EPS TTM Chart
             eps_ttm_chart = create_metric_chart(
                 df, selected_ticker, "EPS_TTM", "EPS - Trailing Twelve Months"

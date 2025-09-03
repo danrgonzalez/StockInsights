@@ -1,3 +1,7 @@
+import glob
+import os
+from datetime import datetime
+
 import numpy as np
 import pandas as pd
 
@@ -126,7 +130,8 @@ def process_stock_data(file_path, csv_path=None):
     # Update latest Price values with SimpleMovingAvg if available
     if sma_mapping and "Price" in df.columns:
         print(
-            f"Updating latest Price values with SimpleMovingAvg for {len(sma_mapping)} tickers..."
+            f"Updating latest Price values with SimpleMovingAvg for "
+            f"{len(sma_mapping)} tickers..."
         )
 
         updated_count = 0
@@ -165,20 +170,27 @@ def process_stock_data(file_path, csv_path=None):
                     df.loc[latest_row_idx, "Price"] = new_price
                     updated_count += 1
                     print(
-                        f"  {ticker}: Updated latest Price from {old_price} to {new_price}"
+                        f"  {ticker}: Updated latest Price from "
+                        f"{old_price} to {new_price}"
                     )
 
-        print(f"Updated Price for {updated_count} tickers with SimpleMovingAvg data")
+        print(
+            f"Updated Price for {updated_count} tickers with " f"SimpleMovingAvg data"
+        )
         if updated_count < len(sma_mapping):
             print(
-                f"Note: {len(sma_mapping) - updated_count} tickers from CSV not found in Excel data"
+                f"Note: {len(sma_mapping) - updated_count} tickers from "
+                f"CSV not found in Excel data"
             )
     elif sma_mapping and "Price" not in df.columns:
         print(
-            "Warning: CSV data loaded but no 'Price' column found in Excel data to update"
+            "Warning: CSV data loaded but no 'Price' column found in "
+            "Excel data to update"
         )
     elif csv_path:
-        print("Warning: CSV file provided but no SimpleMovingAvg data could be loaded")
+        print(
+            "Warning: CSV file provided but no SimpleMovingAvg data " "could be loaded"
+        )
 
     remaining_cols = [
         col
@@ -262,7 +274,8 @@ def verify_core_data_integrity(original_df, processed_df, exclude_price_check=Fa
 
     if exclude_price_check:
         print(
-            "INFO: Skipping Price column verification (updated with SimpleMovingAvg data)"
+            "INFO: Skipping Price column verification "
+            "(updated with SimpleMovingAvg data)"
         )
         core_columns.remove("Price")
 
@@ -359,10 +372,48 @@ def save_processed_data(df, output_path):
     print("File saved successfully!")
 
 
+def get_latest_csv_file():
+    """
+    Find the latest CSV file in the quotes directory based on the
+    YYYY-MM-DD date in filename.
+
+    Returns:
+        str: Path to the latest CSV file, or None if no files found
+    """
+    csv_files = glob.glob("quotes/*-Quote.csv")
+    if not csv_files:
+        return None
+
+    # Extract dates and find the latest
+    dated_files = []
+    for file_path in csv_files:
+        filename = os.path.basename(file_path)
+        try:
+            # Extract date from filename (YYYY-MM-DD-Quote.csv)
+            date_str = filename.split("-Quote.csv")[0]
+            date_obj = datetime.strptime(date_str, "%Y-%m-%d")
+            dated_files.append((date_obj, file_path))
+        except ValueError:
+            continue
+
+    if not dated_files:
+        return None
+
+    # Sort by date and return the latest
+    dated_files.sort(key=lambda x: x[0], reverse=True)
+    latest_file = dated_files[0][1]
+    print(f"Using latest CSV file: {latest_file}")
+    return latest_file
+
+
 def main():
     input_file = "StockData.xlsx"
-    csv_file = "quotes/2025-08-15-Quote.csv"
+    csv_file = get_latest_csv_file()
     output_file = "StockData_Indexed.xlsx"
+
+    if csv_file is None:
+        print("Warning: No CSV files found in quotes directory")
+        csv_file = None
 
     try:
         print("Reading original Excel file...")

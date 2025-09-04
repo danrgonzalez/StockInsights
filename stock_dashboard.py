@@ -197,16 +197,26 @@ def main():
                     st.write("**Methodology:**")
                     st.write(f"• {prediction['methodology']}")
                     st.write(f"• Data Points: {prediction['data_points']} quarters")
-                    st.write(f"• Recent 4Q Growth: {prediction['growth_4q']:.1f}%")
-                    if prediction["growth_8q"] is not None:
+
+                    # Handle different strategy keys gracefully
+                    if "growth_4q" in prediction:
+                        st.write(f"• Recent 4Q Growth: {prediction['growth_4q']:.1f}%")
+                    if (
+                        "growth_8q" in prediction
+                        and prediction["growth_8q"] is not None
+                    ):
                         st.write(f"• Recent 8Q Growth: {prediction['growth_8q']:.1f}%")
                         st.write("• Weighting: 70% recent + 30% long-term")
 
                 with col_method2:
                     st.write("**Statistical Analysis:**")
-                    st.write(f"• 4Q Std Dev: {prediction['std_4q']:.1f}%")
-                    if prediction["std_8q"] is not None:
+
+                    # Handle different strategy keys gracefully
+                    if "std_4q" in prediction:
+                        st.write(f"• 4Q Std Dev: {prediction['std_4q']:.1f}%")
+                    if "std_8q" in prediction and prediction["std_8q"] is not None:
                         st.write(f"• 8Q Std Dev: {prediction['std_8q']:.1f}%")
+
                     st.write(f"• Combined Volatility: {prediction['volatility']:.1f}%")
                     st.write("• Scenarios: Base ±1σ volatility")
 

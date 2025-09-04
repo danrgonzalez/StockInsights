@@ -83,109 +83,30 @@ def calculate_qoq_changes(df):
 
 def predict_next_eps(df, ticker):
     """
-    Predict next quarter EPS using growth rate approach.
+    Predict next quarter EPS using the best performing strategy from backtesting.
 
-    Uses weighted average of recent QoQ growth rates to project forward.
+    Uses seasonal strategy (year-over-year patterns) which performed best on historical data.
 
     Args:
         df (pandas.DataFrame): Stock data with QoQ calculations
         ticker (str): Stock ticker symbol
 
     Returns:
-        dict or None: Prediction results with keys:
-            - predicted_eps: Predicted EPS value
-            - latest_eps: Current latest EPS
-            - predicted_growth: Expected growth rate %
-            - confidence: Confidence level (High/Medium/Low)
-            - data_points: Number of QoQ data points used
-            - growth_4q: Recent 4Q average growth
-            - growth_8q: Recent 8Q average growth (if available)
+        dict or None: Prediction results with comprehensive scenarios
     """
+    from strategies import seasonal_strategy
+
     ticker_data = df[df["Ticker"] == ticker].copy()
     ticker_data = ticker_data.sort_values("Index")
 
-    if "EPS" not in ticker_data.columns or "EPS_QoQ" not in ticker_data.columns:
+    # Get basic prediction from seasonal strategy
+    basic_prediction = seasonal_strategy(ticker_data)
+
+    if basic_prediction is None:
         return None
 
-    # Get recent EPS and QoQ data
-    eps_data = ticker_data["EPS"].dropna()
-    qoq_data = ticker_data["EPS_QoQ"].dropna()
-
-    # Need at least 4 quarters of data for meaningful prediction
-    if len(eps_data) < 4 or len(qoq_data) < 3:
-        return None
-
-    # Get latest EPS value
-    latest_eps = eps_data.iloc[-1]
-
-    # Calculate recent growth rates
-    recent_qoq_4q = qoq_data.tail(4)
-    recent_qoq_8q = qoq_data.tail(8) if len(qoq_data) >= 8 else recent_qoq_4q
-
-    # Remove extreme outliers (beyond ±200% growth)
-    recent_qoq_4q_clean = recent_qoq_4q[
-        (recent_qoq_4q >= -200) & (recent_qoq_4q <= 200)
-    ]
-    recent_qoq_8q_clean = recent_qoq_8q[
-        (recent_qoq_8q >= -200) & (recent_qoq_8q <= 200)
-    ]
-
-    if len(recent_qoq_4q_clean) < 2:
-        return None
-
-    # Calculate average growth rates
-    avg_growth_4q = recent_qoq_4q_clean.mean()
-    avg_growth_8q = (
-        recent_qoq_8q_clean.mean() if len(recent_qoq_8q_clean) >= 4 else avg_growth_4q
-    )
-
-    # Weighted average: favor recent performance but consider longer term
-    if len(qoq_data) >= 8:
-        predicted_growth = (0.7 * avg_growth_4q) + (0.3 * avg_growth_8q)
-        confidence = "High" if len(recent_qoq_4q_clean) == 4 else "Medium"
-    else:
-        predicted_growth = avg_growth_4q
-        confidence = "Medium" if len(recent_qoq_4q_clean) >= 3 else "Low"
-
-    # Calculate historical volatility for scenario analysis
-    growth_std_4q = recent_qoq_4q_clean.std()
-    growth_std_8q = (
-        recent_qoq_8q_clean.std() if len(recent_qoq_8q_clean) >= 4 else growth_std_4q
-    )
-
-    # Use weighted standard deviation (similar to growth rate weighting)
-    if len(qoq_data) >= 8:
-        predicted_volatility = (0.7 * growth_std_4q) + (0.3 * growth_std_8q)
-    else:
-        predicted_volatility = growth_std_4q
-
-    # Handle cases with very low volatility (set minimum threshold)
-    predicted_volatility = max(predicted_volatility, 5.0)  # Minimum 5% volatility
-
-    # Calculate scenario growth rates (±1 standard deviation)
-    best_case_growth = predicted_growth + predicted_volatility
-    worst_case_growth = predicted_growth - predicted_volatility
-
-    # Apply growth to latest EPS for all scenarios
-    predicted_eps = latest_eps * (1 + predicted_growth / 100)
-    best_case_eps = latest_eps * (1 + best_case_growth / 100)
-    worst_case_eps = latest_eps * (1 + worst_case_growth / 100)
-
-    # Ensure predictions are reasonable (not negative for positive companies)
-    if latest_eps > 0:
-        if predicted_eps < 0:
-            predicted_growth = max(predicted_growth, -50)  # Cap at -50%
-            predicted_eps = latest_eps * (1 + predicted_growth / 100)
-            confidence = "Low"
-
-        if worst_case_eps < 0:
-            worst_case_growth = max(worst_case_growth, -75)  # Cap worst case at -75%
-            worst_case_eps = latest_eps * (1 + worst_case_growth / 100)
-
-        # Best case shouldn't be unrealistically high (cap at +200%)
-        if best_case_growth > 200:
-            best_case_growth = 200
-            best_case_eps = latest_eps * (1 + best_case_growth / 100)
+    # Enhance the prediction with EPS_TTM and price calculations
+    prediction = basic_prediction.copy()
 
     # Calculate predicted EPS_TTM scenarios
     # EPS_TTM = sum of last 4 quarters, so we replace the oldest quarter with predicted
@@ -194,7 +115,9 @@ def predict_next_eps(df, ticker):
     best_case_eps_ttm = None
     worst_case_eps_ttm = None
 
-    if "EPS_TTM" in ticker_data.columns:
+    eps_data = ticker_data["EPS"].dropna()
+
+    if "EPS_TTM" in ticker_data.columns and len(eps_data) >= 4:
         # Get current EPS_TTM
         eps_ttm_data = ticker_data["EPS_TTM"].dropna()
         if len(eps_ttm_data) > 0:
@@ -206,9 +129,9 @@ def predict_next_eps(df, ticker):
                 # Replace the oldest quarter (first in the 4Q window) with predicted
                 last_3_quarters = recent_eps.iloc[-3:].sum()  # Most recent 3 quarters
 
-                predicted_eps_ttm = last_3_quarters + predicted_eps
-                best_case_eps_ttm = last_3_quarters + best_case_eps
-                worst_case_eps_ttm = last_3_quarters + worst_case_eps
+                predicted_eps_ttm = last_3_quarters + prediction["predicted_eps"]
+                best_case_eps_ttm = last_3_quarters + prediction["best_case_eps"]
+                worst_case_eps_ttm = last_3_quarters + prediction["worst_case_eps"]
             elif len(recent_eps) >= 1:
                 # If we don't have 4 full quarters, use what we have plus prediction
                 actual_quarters_sum = recent_eps.sum()
@@ -218,16 +141,22 @@ def predict_next_eps(df, ticker):
                 estimated_missing = avg_quarter * missing_quarters
 
                 predicted_eps_ttm = (
-                    actual_quarters_sum + estimated_missing + predicted_eps - latest_eps
+                    actual_quarters_sum
+                    + estimated_missing
+                    + prediction["predicted_eps"]
+                    - prediction["latest_eps"]
                 )
                 best_case_eps_ttm = (
-                    actual_quarters_sum + estimated_missing + best_case_eps - latest_eps
+                    actual_quarters_sum
+                    + estimated_missing
+                    + prediction["best_case_eps"]
+                    - prediction["latest_eps"]
                 )
                 worst_case_eps_ttm = (
                     actual_quarters_sum
                     + estimated_missing
-                    + worst_case_eps
-                    - latest_eps
+                    + prediction["worst_case_eps"]
+                    - prediction["latest_eps"]
                 )
 
     # Calculate EPS_TTM growth rates if we have both current and predicted
@@ -295,36 +224,27 @@ def predict_next_eps(df, ticker):
                         (worst_case_price - current_price) / abs(current_price)
                     ) * 100
 
-    return {
-        "predicted_eps": predicted_eps,
-        "best_case_eps": best_case_eps,
-        "worst_case_eps": worst_case_eps,
-        "latest_eps": latest_eps,
-        "predicted_growth": predicted_growth,
-        "best_case_growth": best_case_growth,
-        "worst_case_growth": worst_case_growth,
-        "current_eps_ttm": current_eps_ttm,
-        "predicted_eps_ttm": predicted_eps_ttm,
-        "best_case_eps_ttm": best_case_eps_ttm,
-        "worst_case_eps_ttm": worst_case_eps_ttm,
-        "predicted_eps_ttm_growth": predicted_eps_ttm_growth,
-        "best_case_eps_ttm_growth": best_case_eps_ttm_growth,
-        "worst_case_eps_ttm_growth": worst_case_eps_ttm_growth,
-        "current_price": current_price,
-        "current_multiple": current_multiple,
-        "predicted_price": predicted_price,
-        "best_case_price": best_case_price,
-        "worst_case_price": worst_case_price,
-        "predicted_price_growth": predicted_price_growth,
-        "best_case_price_growth": best_case_price_growth,
-        "worst_case_price_growth": worst_case_price_growth,
-        "volatility": predicted_volatility,
-        "confidence": confidence,
-        "data_points": len(qoq_data),
-        "growth_4q": avg_growth_4q,
-        "growth_8q": avg_growth_8q if len(qoq_data) >= 8 else None,
-        "std_4q": growth_std_4q,
-        "std_8q": growth_std_8q if len(qoq_data) >= 8 else None,
-        "next_index": ticker_data["Index"].max() + 1,
-        "methodology": "Weighted average with ±1σ volatility bands",
-    }
+    # Add the enhanced predictions to the result
+    prediction.update(
+        {
+            "current_eps_ttm": current_eps_ttm,
+            "predicted_eps_ttm": predicted_eps_ttm,
+            "best_case_eps_ttm": best_case_eps_ttm,
+            "worst_case_eps_ttm": worst_case_eps_ttm,
+            "predicted_eps_ttm_growth": predicted_eps_ttm_growth,
+            "best_case_eps_ttm_growth": best_case_eps_ttm_growth,
+            "worst_case_eps_ttm_growth": worst_case_eps_ttm_growth,
+            "current_price": current_price,
+            "current_multiple": current_multiple,
+            "predicted_price": predicted_price,
+            "best_case_price": best_case_price,
+            "worst_case_price": worst_case_price,
+            "predicted_price_growth": predicted_price_growth,
+            "best_case_price_growth": best_case_price_growth,
+            "worst_case_price_growth": worst_case_price_growth,
+            "next_index": ticker_data["Index"].max() + 1,
+            "methodology": "Year-over-year seasonal (backtest winner)",
+        }
+    )
+
+    return prediction

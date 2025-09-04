@@ -19,6 +19,24 @@ def create_metric_chart(df, ticker, metric, title):
         hover_data=["Report"],
         markers=True,
     )
+
+    # Add horizontal lines for P/E Multiple chart
+    if metric == "Multiple":
+        fig.add_hline(y=10, line_dash="solid", line_color="yellow", line_width=2)
+        fig.add_hline(y=20, line_dash="solid", line_color="yellow", line_width=2)
+        fig.add_hline(y=40, line_dash="solid", line_color="yellow", line_width=2)
+
+        # Ensure y-axis range includes all reference lines
+        data_max = clean_data[metric].max()
+        data_min = clean_data[metric].min()
+        y_max = max(
+            45, data_max + 2
+        )  # At least 45 to show the 40 line with some padding
+        y_min = max(
+            0, min(8, data_min - 2)
+        )  # At least down to 8 to show the 10 line with padding, but not below 0
+        fig.update_yaxes(range=[y_min, y_max])
+
     fig.update_layout(
         xaxis_title="Index (Higher = More Recent)",
         yaxis_title=title,
@@ -45,7 +63,7 @@ def create_qoq_chart(df, ticker, metric, title):
     )
     fig.add_hline(y=0, line_dash="dash", line_color="gray", opacity=0.5)
     if (
-        metric in ["EPS", "Revenue", "EPS_TTM", "Revenue_TTM", "Price"]
+        metric in ["EPS", "Revenue", "EPS_TTM", "Revenue_TTM", "Price", "Multiple"]
         and len(clean_data) > 0
     ):
         qoq_values = clean_data[qoq_column]
@@ -70,6 +88,7 @@ def create_qoq_chart(df, ticker, metric, title):
                 name="8Q Rolling Avg",
                 line=dict(color="magenta", width=2),
                 hovertemplate="8Q Rolling Avg: %{y:.1f}%<extra></extra>",
+                visible="legendonly",
             )
         )
         fig.add_trace(
@@ -80,6 +99,7 @@ def create_qoq_chart(df, ticker, metric, title):
                 name="12Q Rolling Avg",
                 line=dict(color="purple", width=3),
                 hovertemplate="12Q Rolling Avg: %{y:.1f}%<extra></extra>",
+                visible="legendonly",
             )
         )
     fig.update_layout(

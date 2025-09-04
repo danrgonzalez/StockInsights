@@ -83,9 +83,9 @@ def calculate_qoq_changes(df):
 
 def predict_next_eps(df, ticker):
     """
-    Predict next quarter EPS using the best performing strategy from backtesting.
+    Predict next quarter EPS using ticker-specific optimal strategies.
 
-    Uses seasonal strategy (year-over-year patterns) which performed best on historical data.
+    Uses individual backtesting results to select the best strategy for each ticker.
 
     Args:
         df (pandas.DataFrame): Stock data with QoQ calculations
@@ -94,13 +94,20 @@ def predict_next_eps(df, ticker):
     Returns:
         dict or None: Prediction results with comprehensive scenarios
     """
-    from strategies import seasonal_strategy
+    from multi_ticker_backtest import get_ticker_strategy
+    from strategies import get_strategy
 
     ticker_data = df[df["Ticker"] == ticker].copy()
     ticker_data = ticker_data.sort_values("Index")
 
-    # Get basic prediction from seasonal strategy
-    basic_prediction = seasonal_strategy(ticker_data)
+    # Get the optimal strategy for this specific ticker
+    optimal_strategy_name = get_ticker_strategy(
+        ticker, default_strategy="weighted_growth"
+    )
+    optimal_strategy_func = get_strategy(optimal_strategy_name)
+
+    # Get basic prediction from optimal strategy
+    basic_prediction = optimal_strategy_func(ticker_data)
 
     if basic_prediction is None:
         return None
@@ -201,7 +208,8 @@ def predict_next_eps(df, ticker):
         if len(multiple_data) > 0:
             current_multiple = multiple_data.iloc[-1]
 
-            # Only calculate price predictions if we have both current multiple and predicted EPS_TTM
+            # Only calculate price predictions if we have both
+            # current multiple and predicted EPS_TTM
             if (
                 current_multiple is not None
                 and not pd.isna(current_multiple)
@@ -243,7 +251,10 @@ def predict_next_eps(df, ticker):
             "best_case_price_growth": best_case_price_growth,
             "worst_case_price_growth": worst_case_price_growth,
             "next_index": ticker_data["Index"].max() + 1,
-            "methodology": "Year-over-year seasonal (backtest winner)",
+            "methodology": (
+                f"Ticker-specific {optimal_strategy_name.replace('_', ' ').title()} "
+                "(backtested optimal)"
+            ),
         }
     )
 

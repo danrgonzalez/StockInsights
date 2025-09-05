@@ -63,7 +63,22 @@ def create_qoq_chart(df, ticker, metric, title):
     )
     fig.add_hline(y=0, line_dash="dash", line_color="gray", opacity=0.5)
     if (
-        metric in ["EPS", "Revenue", "EPS_TTM", "Revenue_TTM", "Price", "Multiple"]
+        metric
+        in [
+            "EPS",
+            "Revenue",
+            "EPS_TTM",
+            "Revenue_TTM",
+            "Price",
+            "Multiple",
+            "DivYield",
+            "DivYieldAnnual",
+            "PayoutRatio",
+            "PEGRatio",
+            "EPSMomentum",
+            "PriceVolatility",
+            "RevenueConsistency",
+        ]
         and len(clean_data) > 0
     ):
         qoq_values = clean_data[qoq_column]
@@ -78,6 +93,7 @@ def create_qoq_chart(df, ticker, metric, title):
                 name="4Q Rolling Avg",
                 line=dict(color="cyan", width=1),
                 hovertemplate="4Q Rolling Avg: %{y:.1f}%<extra></extra>",
+                visible="legendonly",
             )
         )
         fig.add_trace(
@@ -88,7 +104,6 @@ def create_qoq_chart(df, ticker, metric, title):
                 name="8Q Rolling Avg",
                 line=dict(color="magenta", width=2),
                 hovertemplate="8Q Rolling Avg: %{y:.1f}%<extra></extra>",
-                visible="legendonly",
             )
         )
         fig.add_trace(
@@ -185,10 +200,10 @@ def create_eps_prediction_chart(df, ticker):
             ),
             name="Best Case",
             hovertemplate=(
-                f"<b>Best Case EPS</b><br>"
+                "<b>Best Case EPS</b><br>"
                 f"Value: ${prediction['best_case_eps']:.2f}<br>"
                 f"Growth: {prediction['best_case_growth']:+.1f}%<br>"
-                f"<extra></extra>"
+                "<extra></extra>"
             ),
         )
     )
@@ -204,11 +219,11 @@ def create_eps_prediction_chart(df, ticker):
             ),
             name="Base Case",
             hovertemplate=(
-                f"<b>Base Case EPS</b><br>"
+                "<b>Base Case EPS</b><br>"
                 f"Value: ${prediction['predicted_eps']:.2f}<br>"
                 f"Growth: {prediction['predicted_growth']:+.1f}%<br>"
                 f"Confidence: {prediction['confidence']}<br>"
-                f"<extra></extra>"
+                "<extra></extra>"
             ),
         )
     )
@@ -227,10 +242,10 @@ def create_eps_prediction_chart(df, ticker):
             ),
             name="Worst Case",
             hovertemplate=(
-                f"<b>Worst Case EPS</b><br>"
+                "<b>Worst Case EPS</b><br>"
                 f"Value: ${prediction['worst_case_eps']:.2f}<br>"
                 f"Growth: {prediction['worst_case_growth']:+.1f}%<br>"
-                f"<extra></extra>"
+                "<extra></extra>"
             ),
         )
     )
@@ -304,7 +319,10 @@ def create_eps_prediction_chart(df, ticker):
 
     # Update title to indicate prediction
     fig.update_layout(
-        title=f"Earnings Per Share with Next Quarter Prediction (Most Recent = Higher Index)",
+        title=(
+            "Earnings Per Share with Next Quarter Prediction "
+            "(Most Recent = Higher Index)"
+        ),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
     )
 
@@ -351,10 +369,10 @@ def create_eps_ttm_prediction_chart(df, ticker):
             ),
             name="Best Case TTM",
             hovertemplate=(
-                f"<b>Best Case EPS TTM</b><br>"
+                "<b>Best Case EPS TTM</b><br>"
                 f"Value: ${prediction['best_case_eps_ttm']:.2f}<br>"
                 f"Growth: {prediction['best_case_eps_ttm_growth']:+.1f}%<br>"
-                f"<extra></extra>"
+                "<extra></extra>"
             ),
         )
     )
@@ -370,11 +388,11 @@ def create_eps_ttm_prediction_chart(df, ticker):
             ),
             name="Base Case TTM",
             hovertemplate=(
-                f"<b>Base Case EPS TTM</b><br>"
+                "<b>Base Case EPS TTM</b><br>"
                 f"Value: ${prediction['predicted_eps_ttm']:.2f}<br>"
                 f"Growth: {prediction['predicted_eps_ttm_growth']:+.1f}%<br>"
                 f"Confidence: {prediction['confidence']}<br>"
-                f"<extra></extra>"
+                "<extra></extra>"
             ),
         )
     )
@@ -393,10 +411,10 @@ def create_eps_ttm_prediction_chart(df, ticker):
             ),
             name="Worst Case TTM",
             hovertemplate=(
-                f"<b>Worst Case EPS TTM</b><br>"
+                "<b>Worst Case EPS TTM</b><br>"
                 f"Value: ${prediction['worst_case_eps_ttm']:.2f}<br>"
                 f"Growth: {prediction['worst_case_eps_ttm_growth']:+.1f}%<br>"
-                f"<extra></extra>"
+                "<extra></extra>"
             ),
         )
     )
@@ -470,7 +488,10 @@ def create_eps_ttm_prediction_chart(df, ticker):
 
     # Update title to indicate TTM prediction
     fig.update_layout(
-        title=f"EPS TTM with Next Quarter Impact Prediction (Most Recent = Higher Index)",
+        title=(
+            "EPS TTM with Next Quarter Impact Prediction "
+            "(Most Recent = Higher Index)"
+        ),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
     )
 
@@ -479,7 +500,8 @@ def create_eps_ttm_prediction_chart(df, ticker):
 
 def create_price_prediction_chart(df, ticker):
     """
-    Create Price chart with prediction scenarios based on EPS_TTM predictions and current Multiple.
+    Create Price chart with prediction scenarios based on EPS_TTM predictions and
+    current Multiple.
 
     Args:
         df (pandas.DataFrame): Stock data with QoQ calculations
@@ -517,11 +539,11 @@ def create_price_prediction_chart(df, ticker):
             ),
             name="Best Case Price",
             hovertemplate=(
-                f"<b>Best Case Price</b><br>"
+                "<b>Best Case Price</b><br>"
                 f"Value: ${prediction['best_case_price']:.2f}<br>"
                 f"Growth: {prediction['best_case_price_growth']:+.1f}%<br>"
                 f"P/E: {prediction['current_multiple']:.1f}x<br>"
-                f"<extra></extra>"
+                "<extra></extra>"
             ),
         )
     )
@@ -537,12 +559,12 @@ def create_price_prediction_chart(df, ticker):
             ),
             name="Base Case Price",
             hovertemplate=(
-                f"<b>Base Case Price</b><br>"
+                "<b>Base Case Price</b><br>"
                 f"Value: ${prediction['predicted_price']:.2f}<br>"
                 f"Growth: {prediction['predicted_price_growth']:+.1f}%<br>"
                 f"P/E: {prediction['current_multiple']:.1f}x<br>"
                 f"Confidence: {prediction['confidence']}<br>"
-                f"<extra></extra>"
+                "<extra></extra>"
             ),
         )
     )
@@ -561,11 +583,11 @@ def create_price_prediction_chart(df, ticker):
             ),
             name="Worst Case Price",
             hovertemplate=(
-                f"<b>Worst Case Price</b><br>"
+                "<b>Worst Case Price</b><br>"
                 f"Value: ${prediction['worst_case_price']:.2f}<br>"
                 f"Growth: {prediction['worst_case_price_growth']:+.1f}%<br>"
                 f"P/E: {prediction['current_multiple']:.1f}x<br>"
-                f"<extra></extra>"
+                "<extra></extra>"
             ),
         )
     )
@@ -639,7 +661,9 @@ def create_price_prediction_chart(df, ticker):
 
     # Update title to indicate price prediction
     fig.update_layout(
-        title=f"Stock Price with Multiple-Based Prediction (Most Recent = Higher Index)",
+        title=(
+            "Stock Price with Multiple-Based Prediction " "(Most Recent = Higher Index)"
+        ),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
     )
 

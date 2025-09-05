@@ -70,14 +70,190 @@ def calculate_qoq_changes(df):
             multiple = price_data / eps_ttm_data
             multiple = multiple.replace([np.inf, -np.inf], np.nan)
             df_with_qoq.loc[ticker_mask, "Multiple"] = multiple
+
+        # Calculate dividend yield (DivAmt/Price * 100) - Quarterly
+        if "Price" in ticker_data.columns and "DivAmt" in ticker_data.columns:
+            price_data = ticker_data["Price"]
+            div_data = ticker_data["DivAmt"]
+            dividend_yield = (div_data / price_data) * 100
+            dividend_yield = dividend_yield.replace([np.inf, -np.inf], np.nan)
+            df_with_qoq.loc[ticker_mask, "DivYield"] = dividend_yield
+
+            # Calculate annualized dividend yield (DivAmt * 4 / Price * 100)
+            dividend_yield_annual = (div_data * 4 / price_data) * 100
+            dividend_yield_annual = dividend_yield_annual.replace(
+                [np.inf, -np.inf], np.nan
+            )
+            df_with_qoq.loc[ticker_mask, "DivYieldAnnual"] = dividend_yield_annual
+
+        # Calculate Payout Ratio (Annual DivAmt / EPS_TTM * 100)
+        if (
+            "DivAmt" in ticker_data.columns
+            and "EPS_TTM" in df_with_qoq.loc[ticker_mask].columns
+        ):
+            div_data = ticker_data["DivAmt"]
+            eps_ttm_data = df_with_qoq.loc[ticker_mask, "EPS_TTM"]
+            # Annualize dividend by multiplying quarterly dividend by 4
+            annual_div = div_data * 4
+            payout_ratio = (annual_div / eps_ttm_data) * 100
+            payout_ratio = payout_ratio.replace([np.inf, -np.inf], np.nan)
+            df_with_qoq.loc[ticker_mask, "PayoutRatio"] = payout_ratio
     df_with_qoq = df_with_qoq.sort_values(["Ticker", "Index"])
     for ticker in df_with_qoq["Ticker"].unique():
         ticker_mask = df_with_qoq["Ticker"] == ticker
         ticker_data = df_with_qoq[ticker_mask].copy()
-        for metric in ["EPS", "Revenue", "Price", "EPS_TTM", "Revenue_TTM", "Multiple"]:
+        for metric in [
+            "EPS",
+            "Revenue",
+            "Price",
+            "EPS_TTM",
+            "Revenue_TTM",
+            "Multiple",
+            "DivYield",
+            "DivYieldAnnual",
+            "PayoutRatio",
+        ]:
             if metric in ticker_data.columns:
                 qoq_change = ticker_data[metric].pct_change(fill_method=None) * 100
                 df_with_qoq.loc[ticker_mask, f"{metric}_QoQ"] = qoq_change
+
+        # Calculate advanced metrics requiring QoQ data
+        ticker_data_with_qoq = df_with_qoq[ticker_mask].copy()
+
+        # EPS Growth Momentum (EPS_4Q_Avg - EPS_8Q_Avg)
+        if "EPS_QoQ" in ticker_data_with_qoq.columns:
+            eps_qoq_values = ticker_data_with_qoq["EPS_QoQ"].dropna()
+            if len(eps_qoq_values) >= 8:
+                rolling_4q = eps_qoq_values.rolling(window=4, min_periods=4).mean()
+                rolling_8q = eps_qoq_values.rolling(window=8, min_periods=8).mean()
+                eps_momentum = rolling_4q - rolling_8q
+                df_with_qoq.loc[ticker_mask, "EPSMomentum"] = eps_momentum
+
+        # Price Volatility (Standard deviation of Price_QoQ over 8Q window)
+        if "Price_QoQ" in ticker_data_with_qoq.columns:
+            price_qoq_values = ticker_data_with_qoq["Price_QoQ"].dropna()
+            if len(price_qoq_values) >= 4:
+                price_volatility = price_qoq_values.rolling(
+                    window=8, min_periods=4
+                ).std()
+                df_with_qoq.loc[ticker_mask, "PriceVolatility"] = price_volatility
+
+        # Revenue Consistency (Coefficient of variation for Revenue_QoQ)
+        if "Revenue_QoQ" in ticker_data_with_qoq.columns:
+            revenue_qoq_values = ticker_data_with_qoq["Revenue_QoQ"].dropna()
+            if len(revenue_qoq_values) >= 4:
+                rolling_mean = revenue_qoq_values.rolling(
+                    window=8, min_periods=4
+                ).mean()
+                rolling_std = revenue_qoq_values.rolling(window=8, min_periods=4).std()
+                # Coefficient of variation = std / mean * 100,
+                # inverted for consistency score
+                revenue_consistency = 100 - ((rolling_std / rolling_mean.abs()) * 100)
+                revenue_consistency = revenue_consistency.replace(
+                    [np.inf, -np.inf], np.nan
+                )
+                df_with_qoq.loc[ticker_mask, "RevenueConsistency"] = revenue_consistency
+
+        # Dividend Growth Rate - Based on actual dividend changes over time
+        # Find when dividends actually increased/decreased, then calculate growth rate
+        if "DivAmt" in ticker_data_with_qoq.columns:
+            div_amounts = ticker_data_with_qoq["DivAmt"].dropna()
+            if len(div_amounts) >= 4:
+                # Find dividend change points (where amount actually changed)
+                div_changes = []
+                current_div = None
+
+                for i, (idx, div_amt) in enumerate(div_amounts.items()):
+                    if current_div is None:
+                        current_div = div_amt
+                        last_change_idx = i
+                    elif (
+                        abs(div_amt - current_div) > 0.001
+                    ):  # Tolerance for floating point comparison
+                        # Dividend changed!
+                        periods_since_last_change = i - last_change_idx
+                        if current_div > 0:  # Avoid division by zero
+                            growth_rate = ((div_amt - current_div) / current_div) * 100
+                            div_changes.append(
+                                {
+                                    "from_amount": current_div,
+                                    "to_amount": div_amt,
+                                    "growth_rate": growth_rate,
+                                    "periods": periods_since_last_change,
+                                    "end_idx": idx,
+                                }
+                            )
+                        current_div = div_amt
+                        last_change_idx = i
+
+                # Calculate overall dividend growth metrics
+                if len(div_changes) >= 2:
+                    # Calculate annualized growth rate from first to last change
+                    first_div = div_changes[0]["from_amount"]
+                    last_div = div_changes[-1]["to_amount"]
+                    total_periods = len(div_amounts)
+
+                    if first_div > 0 and total_periods > 4:
+                        # Annualized dividend growth rate
+                        years = total_periods / 4  # Assuming quarterly data
+                        annual_growth = (
+                            (last_div / first_div) ** (1 / years) - 1
+                        ) * 100
+
+                        # Assign this growth rate to recent periods
+                        df_with_qoq.loc[ticker_mask, "DivGrowthRate"] = annual_growth
+
+                    # Also track frequency of increases
+                    increases = [
+                        change for change in div_changes if change["growth_rate"] > 0
+                    ]
+                    if len(increases) > 0:
+                        avg_increase_rate = np.mean(
+                            [inc["growth_rate"] for inc in increases]
+                        )
+                        df_with_qoq.loc[ticker_mask, "DivIncreaseFreq"] = len(
+                            increases
+                        ) / (
+                            total_periods / 4
+                        )  # increases per year
+                        df_with_qoq.loc[
+                            ticker_mask, "AvgDivIncrease"
+                        ] = avg_increase_rate
+                else:
+                    # Not enough dividend changes to calculate meaningful growth
+                    df_with_qoq.loc[ticker_mask, "DivGrowthRate"] = 0.0
+
+        # PEG Ratio (P/E Multiple / EPS Growth Rate)
+        if (
+            "Multiple" in ticker_data_with_qoq.columns
+            and "EPS_QoQ" in ticker_data_with_qoq.columns
+        ):
+            multiple_data = ticker_data_with_qoq["Multiple"]
+            eps_qoq_values = ticker_data_with_qoq["EPS_QoQ"].dropna()
+            if len(eps_qoq_values) >= 4:
+                # Use 4Q rolling average of EPS growth for PEG calculation
+                eps_growth_4q = eps_qoq_values.rolling(window=4, min_periods=4).mean()
+                # Annualize the quarterly growth rate: (1 + quarterly_rate/100)^4 - 1
+                eps_growth_annual = ((1 + eps_growth_4q / 100) ** 4 - 1) * 100
+                peg_ratio = (
+                    multiple_data / eps_growth_annual.abs()
+                )  # Use absolute value to handle negative growth
+                peg_ratio = peg_ratio.replace([np.inf, -np.inf], np.nan)
+                df_with_qoq.loc[ticker_mask, "PEGRatio"] = peg_ratio
+
+        # PEGY Ratio (PEG Ratio / Annualized Dividend Yield)
+        if (
+            "PEGRatio" in df_with_qoq.loc[ticker_mask].columns
+            and "DivYieldAnnual" in df_with_qoq.loc[ticker_mask].columns
+        ):
+            peg_data = df_with_qoq.loc[ticker_mask, "PEGRatio"]
+            div_yield_annual_data = df_with_qoq.loc[ticker_mask, "DivYieldAnnual"]
+            # Only calculate PEGY if annualized dividend yield > 0
+            pegy_ratio = np.where(
+                div_yield_annual_data > 0, peg_data / div_yield_annual_data, np.nan
+            )
+            df_with_qoq.loc[ticker_mask, "PEGYRatio"] = pegy_ratio
+
     return df_with_qoq
 
 
@@ -187,7 +363,8 @@ def predict_next_eps(df, ticker):
         ) * 100
 
     # Calculate predicted Price scenarios using current Multiple
-    # Price = EPS_TTM × Multiple, so predicted price = predicted EPS_TTM × current Multiple
+    # Price = EPS_TTM × Multiple, so predicted price = predicted EPS_TTM ×
+    # current Multiple
     current_price = None
     current_multiple = None
     predicted_price = None
@@ -259,3 +436,163 @@ def predict_next_eps(df, ticker):
     )
 
     return prediction
+
+
+def calculate_sector_rankings(df):
+    """
+    Calculate sector rankings for each ticker based on key metrics.
+
+    Args:
+        df (pandas.DataFrame): Stock data with calculated metrics
+
+    Returns:
+        pandas.DataFrame: DataFrame with sector ranking columns added
+    """
+    if "Sector" not in df.columns:
+        return df
+
+    df_with_rankings = df.copy()
+
+    # Metrics to rank (higher is better)
+    positive_metrics = [
+        "EPS_TTM",
+        "Revenue_TTM",
+        "DivYield",
+        "DivYieldAnnual",
+        "RevenueConsistency",
+        "EPSMomentum",
+    ]
+    # Metrics to rank (lower is better)
+    negative_metrics = ["Multiple", "PriceVolatility", "PEGRatio", "PEGYRatio"]
+
+    for metric in positive_metrics + negative_metrics:
+        if metric in df.columns:
+            ranking_col = f"{metric}_SectorRank"
+            df_with_rankings[ranking_col] = np.nan
+
+            for sector in df["Sector"].unique():
+                if sector in ["Unknown", "Unclassified", "N/A", None]:
+                    continue
+
+                sector_mask = df_with_rankings["Sector"] == sector
+                sector_data = df_with_rankings[sector_mask][metric].dropna()
+
+                if len(sector_data) > 1:
+                    if metric in positive_metrics:
+                        # Higher values get better ranks (1 = best)
+                        ranks = sector_data.rank(method="min", ascending=False)
+                    else:
+                        # Lower values get better ranks (1 = best)
+                        ranks = sector_data.rank(method="min", ascending=True)
+
+                    df_with_rankings.loc[sector_mask, ranking_col] = ranks.reindex(
+                        df_with_rankings[sector_mask].index
+                    )
+
+    return df_with_rankings
+
+
+def calculate_outperformance_ratios(df):
+    """
+    Calculate outperformance ratios vs sector and overall market averages.
+
+    Args:
+        df (pandas.DataFrame): Stock data with calculated metrics
+
+    Returns:
+        pandas.DataFrame: DataFrame with outperformance ratio columns added
+    """
+    df_with_outperf = df.copy()
+
+    # Metrics to calculate outperformance for
+    metrics = ["Price_QoQ", "EPS_QoQ", "Revenue_QoQ", "EPS_TTM", "Revenue_TTM"]
+
+    for metric in metrics:
+        if metric not in df.columns:
+            continue
+
+        # Calculate market (overall) average
+        market_avg = df[metric].mean()
+        market_outperf_col = f"{metric}_MarketOutperf"
+        df_with_outperf[market_outperf_col] = (
+            (df[metric] / market_avg) * 100 if market_avg != 0 else np.nan
+        )
+
+        # Calculate sector outperformance if sector data available
+        if "Sector" in df.columns:
+            sector_outperf_col = f"{metric}_SectorOutperf"
+            df_with_outperf[sector_outperf_col] = np.nan
+
+            for sector in df["Sector"].unique():
+                if sector in ["Unknown", "Unclassified", "N/A", None]:
+                    continue
+
+                sector_mask = df_with_outperf["Sector"] == sector
+                sector_avg = df_with_outperf[sector_mask][metric].mean()
+
+                if sector_avg != 0 and not pd.isna(sector_avg):
+                    sector_outperf = (
+                        df_with_outperf.loc[sector_mask, metric] / sector_avg
+                    ) * 100
+                    df_with_outperf.loc[
+                        sector_mask, sector_outperf_col
+                    ] = sector_outperf
+
+    return df_with_outperf
+
+
+def calculate_downside_capture(df):
+    """
+    Calculate downside capture ratio - how much a stock falls during market downturns.
+
+    Args:
+        df (pandas.DataFrame): Stock data with Price_QoQ calculated
+
+    Returns:
+        pandas.DataFrame: DataFrame with downside capture column added
+    """
+    if "Price_QoQ" not in df.columns:
+        return df
+
+    df_with_downside = df.copy()
+
+    # Calculate market average price performance for each period
+    market_performance = df.groupby("Index")["Price_QoQ"].mean().dropna()
+
+    # Identify negative market periods (market down quarters)
+    negative_periods = market_performance[market_performance < 0]
+
+    if len(negative_periods) == 0:
+        df_with_downside["DownsideCapture"] = np.nan
+        return df_with_downside
+
+    # Calculate downside capture for each ticker
+    df_with_downside["DownsideCapture"] = np.nan
+
+    for ticker in df["Ticker"].unique():
+        ticker_mask = df_with_downside["Ticker"] == ticker
+        ticker_data = df_with_downside[ticker_mask].copy()
+
+        # Get ticker performance during negative market periods
+        ticker_downside_periods = []
+        market_downside_periods = []
+
+        for index, market_return in negative_periods.items():
+            ticker_return = ticker_data[ticker_data["Index"] == index]["Price_QoQ"]
+            if not ticker_return.empty and not pd.isna(ticker_return.iloc[0]):
+                ticker_downside_periods.append(ticker_return.iloc[0])
+                market_downside_periods.append(market_return)
+
+        if (
+            len(ticker_downside_periods) >= 3
+        ):  # Need at least 3 down periods for meaningful calculation
+            # Calculate average downside capture
+            ticker_avg_down = np.mean(ticker_downside_periods)
+            market_avg_down = np.mean(market_downside_periods)
+
+            if market_avg_down != 0:
+                downside_capture = (ticker_avg_down / market_avg_down) * 100
+                # Populate all rows for this ticker with the same downside capture ratio
+                df_with_downside.loc[ticker_mask, "DownsideCapture"] = downside_capture
+
+    return df_with_downside

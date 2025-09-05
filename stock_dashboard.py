@@ -23,7 +23,14 @@ from charts import (
     create_price_prediction_chart,
     create_qoq_chart,
 )
-from data_utils import calculate_qoq_changes, load_data, predict_next_eps
+from data_utils import (
+    calculate_downside_capture,
+    calculate_outperformance_ratios,
+    calculate_qoq_changes,
+    calculate_sector_rankings,
+    load_data,
+    predict_next_eps,
+)
 from ui_components import display_summary_stats
 
 # MUST be the very first Streamlit command
@@ -72,6 +79,11 @@ def main():
     # Calculate QoQ changes
     df = calculate_qoq_changes(df)
 
+    # Calculate advanced analytics
+    df = calculate_sector_rankings(df)
+    df = calculate_outperformance_ratios(df)
+    df = calculate_downside_capture(df)
+
     # Display data info
     st.sidebar.header("📊 Data Overview")
     st.sidebar.write(f"**Total Records:** {len(df):,}")
@@ -97,11 +109,12 @@ def main():
     )
 
     # Main content tabs
-    tab1, tab2, tab3 = st.tabs(
+    tab1, tab2, tab3, tab4 = st.tabs(
         [
             "📋 Individual Analysis",
             "📊 Multi-Ticker Comparison",
             "📈 Rolling Averages Summary",
+            "📚 Methodology",
         ]
     )
 
@@ -165,7 +178,10 @@ def main():
                 confidence_color = {"High": "🟢", "Medium": "🟡", "Low": "🔴"}
                 st.metric(
                     "Confidence Level",
-                    f"{confidence_color.get(prediction['confidence'], '⚪')} {prediction['confidence']}",
+                    (
+                        f"{confidence_color.get(prediction['confidence'], '⚪')} "
+                        f"{prediction['confidence']}"
+                    ),
                 )
 
             with col_volatility:
@@ -180,7 +196,9 @@ def main():
             )
 
             st.info(
-                f"📊 **Scenario Range**: ${prediction['worst_case_eps']:.2f} to ${prediction['best_case_eps']:.2f} "
+                f"📊 **Scenario Range**: "
+                f"${prediction['worst_case_eps']:.2f} to "
+                f"${prediction['best_case_eps']:.2f} "
                 f"(${range_span:.2f} spread, {range_pct:.0f}% of base case)"
             )
 
@@ -232,7 +250,8 @@ def main():
                 )
         else:
             st.info(
-                "Insufficient historical data for EPS prediction (requires at least 4 quarters)"
+                "Insufficient historical data for EPS prediction "
+                "(requires at least 4 quarters)"
             )
 
         # EPS TTM Prediction Section
@@ -285,8 +304,11 @@ def main():
 
             # TTM Impact explanation
             st.info(
-                f"📈 **TTM Impact**: The predicted quarter will replace the oldest quarter in the TTM calculation, "
-                f"potentially changing annual earnings by {prediction['predicted_eps_ttm_growth']:+.1f}% in the base case scenario."
+                f"📈 **TTM Impact**: The predicted quarter will replace "
+                f"the oldest quarter in the TTM calculation, "
+                f"potentially changing annual earnings by "
+                f"{prediction['predicted_eps_ttm_growth']:+.1f}% in the base case "
+                f"scenario."
             )
 
             # Enhanced EPS TTM chart with all scenarios
@@ -309,13 +331,21 @@ def main():
                     recent_quarters = (
                         df[df["Ticker"] == selected_ticker]["EPS"].dropna().tail(4)
                     )
-                    st.markdown(f"**Current TTM Components:**")
+                    st.markdown("**Current TTM Components:**")
                     st.markdown(
-                        f"• Last 4 quarters: ${recent_quarters.iloc[0]:.2f} + ${recent_quarters.iloc[1]:.2f} + ${recent_quarters.iloc[2]:.2f} + ${recent_quarters.iloc[3]:.2f} = ${recent_quarters.sum():.2f}"
+                        f"• Last 4 quarters: ${recent_quarters.iloc[0]:.2f} + "
+                        f"${recent_quarters.iloc[1]:.2f} + "
+                        f"${recent_quarters.iloc[2]:.2f} + "
+                        f"${recent_quarters.iloc[3]:.2f} = "
+                        f"${recent_quarters.sum():.2f}"
                     )
-                    st.markdown(f"**Predicted TTM Components:**")
+                    st.markdown("**Predicted TTM Components:**")
                     st.markdown(
-                        f"• Next TTM: ${recent_quarters.iloc[1]:.2f} + ${recent_quarters.iloc[2]:.2f} + ${recent_quarters.iloc[3]:.2f} + ${prediction['predicted_eps']:.2f} = ${prediction['predicted_eps_ttm']:.2f}"
+                        f"• Next TTM: ${recent_quarters.iloc[1]:.2f} + "
+                        f"${recent_quarters.iloc[2]:.2f} + "
+                        f"${recent_quarters.iloc[3]:.2f} + "
+                        f"${prediction['predicted_eps']:.2f} = "
+                        f"${prediction['predicted_eps_ttm']:.2f}"
                     )
 
         # Price Prediction Section
@@ -376,8 +406,10 @@ def main():
 
             # Price prediction explanation
             st.info(
-                f"📈 **Multiple-Based Valuation**: Price predictions assume current P/E multiple ({prediction['current_multiple']:.1f}x) "
-                f"remains constant, applied to predicted EPS TTM scenarios. Base case suggests "
+                f"📈 **Multiple-Based Valuation**: Price predictions assume "
+                f"current P/E multiple ({prediction['current_multiple']:.1f}x) "
+                f"remains constant, applied to predicted EPS TTM scenarios. "
+                f"Base case suggests "
                 f"{prediction['predicted_price_growth']:+.1f}% price movement."
             )
 
@@ -391,24 +423,32 @@ def main():
 
                 with col_price_method1:
                     st.write("**Valuation Method:**")
-                    st.write(f"• Price = EPS TTM × P/E Multiple")
+                    st.write("• Price = EPS TTM × P/E Multiple")
                     st.write(f"• Current P/E: {prediction['current_multiple']:.1f}x")
-                    st.write(f"• Assumes multiple remains constant")
+                    st.write("• Assumes multiple remains constant")
                     st.write("• Scenarios based on EPS TTM predictions")
 
                 with col_price_method2:
                     st.write("**Price Calculation:**")
                     st.write(
-                        f"• Current: ${prediction['current_eps_ttm']:.2f} × {prediction['current_multiple']:.1f}x = ${prediction['current_price']:.2f}"
+                        f"• Current: ${prediction['current_eps_ttm']:.2f} × "
+                        f"{prediction['current_multiple']:.1f}x = "
+                        f"${prediction['current_price']:.2f}"
                     )
                     st.write(
-                        f"• Base Case: ${prediction['predicted_eps_ttm']:.2f} × {prediction['current_multiple']:.1f}x = ${prediction['predicted_price']:.2f}"
+                        f"• Base Case: ${prediction['predicted_eps_ttm']:.2f} × "
+                        f"{prediction['current_multiple']:.1f}x = "
+                        f"${prediction['predicted_price']:.2f}"
                     )
                     st.write(
-                        f"• Best Case: ${prediction['best_case_eps_ttm']:.2f} × {prediction['current_multiple']:.1f}x = ${prediction['best_case_price']:.2f}"
+                        f"• Best Case: ${prediction['best_case_eps_ttm']:.2f} × "
+                        f"{prediction['current_multiple']:.1f}x = "
+                        f"${prediction['best_case_price']:.2f}"
                     )
                     st.write(
-                        f"• Worst Case: ${prediction['worst_case_eps_ttm']:.2f} × {prediction['current_multiple']:.1f}x = ${prediction['worst_case_price']:.2f}"
+                        f"• Worst Case: ${prediction['worst_case_eps_ttm']:.2f} × "
+                        f"{prediction['current_multiple']:.1f}x = "
+                        f"${prediction['worst_case_price']:.2f}"
                     )
 
                 st.markdown("**Important Assumptions:**")
@@ -417,10 +457,12 @@ def main():
                 )
                 st.markdown("• **EPS-Driven**: Price moves are purely earnings-driven")
                 st.markdown(
-                    "• **No Market Factors**: Excludes sentiment, sector rotation, macro events"
+                    "• **No Market Factors**: Excludes sentiment, sector rotation, "
+                    "macro events"
                 )
                 st.markdown(
-                    "• **Historical Basis**: Multiple reflects recent valuation preference"
+                    "• **Historical Basis**: Multiple reflects recent valuation "
+                    "preference"
                 )
 
         st.markdown("---")
@@ -543,6 +585,13 @@ def main():
                 "Revenue_TTM",
                 "Price",
                 "Multiple",
+                "DivYield",
+                "DivYieldAnnual",
+                "PayoutRatio",
+                "PEGRatio",
+                "EPSMomentum",
+                "PriceVolatility",
+                "RevenueConsistency",
             ]:
                 qoq_col = f"{metric}_QoQ"
                 if qoq_col in ticker_data.columns:
@@ -680,7 +729,23 @@ def main():
                 ticker_summary["Sub_Industry"] = "N/A"
 
             # For each metric, calculate the latest rolling averages
-            for metric in ["EPS", "Revenue", "EPS_TTM", "Revenue_TTM", "Price"]:
+            for metric in [
+                "EPS",
+                "Revenue",
+                "EPS_TTM",
+                "Revenue_TTM",
+                "Price",
+                "DivYield",
+                "DivYieldAnnual",
+                "PayoutRatio",
+                "PEGRatio",
+                "EPSMomentum",
+                "PriceVolatility",
+                "RevenueConsistency",
+                "DivGrowthRate",
+                "DivIncreaseFreq",
+                "AvgDivIncrease",
+            ]:
                 qoq_col = f"{metric}_QoQ"
                 if qoq_col in ticker_data.columns:
                     qoq_values = ticker_data[qoq_col].dropna()
@@ -777,7 +842,17 @@ def main():
                 display_cols.extend(["Sector", "Industry", "Sub_Industry"])
 
             # Add columns for each metric with descriptive names
-            for metric in ["EPS", "Revenue", "EPS_TTM", "Revenue_TTM", "Price"]:
+            for metric in [
+                "EPS",
+                "Revenue",
+                "EPS_TTM",
+                "Revenue_TTM",
+                "Price",
+                "DivYield",
+                "DivYieldAnnual",
+                "PayoutRatio",
+                "PEGRatio",
+            ]:
                 for period in ["4Q", "8Q", "12Q"]:
                     col_name = f"{metric}_{period}_Avg"
                     if col_name in filtered_rolling_df.columns:
@@ -807,6 +882,27 @@ def main():
                 "Price_4Q_Avg": "Price 4Q Avg",
                 "Price_8Q_Avg": "Price 8Q Avg",
                 "Price_12Q_Avg": "Price 12Q Avg",
+                "DivYield_4Q_Avg": "Div Yield Q 4Q Avg",
+                "DivYield_8Q_Avg": "Div Yield Q 8Q Avg",
+                "DivYield_12Q_Avg": "Div Yield Q 12Q Avg",
+                "DivYieldAnnual_4Q_Avg": "Div Yield Annual 4Q Avg",
+                "DivYieldAnnual_8Q_Avg": "Div Yield Annual 8Q Avg",
+                "DivYieldAnnual_12Q_Avg": "Div Yield Annual 12Q Avg",
+                "PayoutRatio_4Q_Avg": "Payout Ratio 4Q Avg",
+                "PayoutRatio_8Q_Avg": "Payout Ratio 8Q Avg",
+                "PayoutRatio_12Q_Avg": "Payout Ratio 12Q Avg",
+                "PEGRatio_4Q_Avg": "PEG Ratio 4Q Avg",
+                "PEGRatio_8Q_Avg": "PEG Ratio 8Q Avg",
+                "PEGRatio_12Q_Avg": "PEG Ratio 12Q Avg",
+                "DivGrowthRate_4Q_Avg": "Div Growth Rate 4Q Avg",
+                "DivGrowthRate_8Q_Avg": "Div Growth Rate 8Q Avg",
+                "DivGrowthRate_12Q_Avg": "Div Growth Rate 12Q Avg",
+                "DivIncreaseFreq_4Q_Avg": "Div Increase Freq 4Q Avg",
+                "DivIncreaseFreq_8Q_Avg": "Div Increase Freq 8Q Avg",
+                "DivIncreaseFreq_12Q_Avg": "Div Increase Freq 12Q Avg",
+                "AvgDivIncrease_4Q_Avg": "Avg Div Increase 4Q Avg",
+                "AvgDivIncrease_8Q_Avg": "Avg Div Increase 8Q Avg",
+                "AvgDivIncrease_12Q_Avg": "Avg Div Increase 12Q Avg",
                 "Latest_Multiple": "Latest P/E Multiple",
                 "Latest_Revenue_TTM": "Latest Revenue TTM ($M)",
             }
@@ -1080,11 +1176,352 @@ def main():
                 label="📥 Download Complete Rolling Averages Data",
                 data=csv,
                 file_name=(
-                    f"rolling_averages_summary_"
+                    "rolling_averages_summary_"
                     f"{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.csv"
                 ),
                 mime="text/csv",
             )
+
+    with tab4:
+        st.header("📚 Methodology & Calculations")
+        st.markdown("---")
+
+        st.markdown(
+            """
+        This section explains how each metric is calculated using **AAPL** as our
+        example ticker.
+        All calculations are performed on a per-ticker basis using quarterly data.
+        """
+        )
+
+        # Core Metrics Section
+        st.subheader("🔢 Core Metrics")
+
+        with st.expander("**EPS TTM (Trailing Twelve Months)**", expanded=False):
+            st.markdown(
+                """
+            **Formula**: `EPS_TTM = Sum of last 4 quarters of EPS`
+
+            **Example (AAPL)**:
+            - Q4 2023: $2.18
+            - Q1 2024: $2.18
+            - Q2 2024: $1.40
+            - Q3 2024: $1.64
+            - **EPS TTM = $2.18 + $2.18 + $1.40 + $1.64 = $7.40**
+
+            **Purpose**: Shows annualized earnings performance, smoothing out quarterly
+            volatility.
+            """
+            )
+
+        with st.expander("**P/E Multiple**", expanded=False):
+            st.markdown(
+                """
+            **Formula**: `Multiple = Price / EPS_TTM`
+
+            **Example (AAPL)**:
+            - Current Price: $150.00
+            - EPS TTM: $7.40
+            - **P/E Multiple = $150.00 / $7.40 = 20.3x**
+
+            **Purpose**: Shows how much investors pay for each dollar of earnings.
+            Lower is generally better value.
+            """
+            )
+
+        with st.expander("**Dividend Yield (Quarterly & Annual)**", expanded=False):
+            st.markdown(
+                """
+            **Quarterly Formula**: `DivYield = (DivAmt / Price) × 100`
+            **Annual Formula**: `DivYieldAnnual = (DivAmt × 4 / Price) × 100`
+
+            **Example (AAPL)**:
+            - Quarterly Dividend: $0.24
+            - Current Price: $150.00
+            - **Quarterly Yield = ($0.24 / $150.00) × 100 = 0.16%**
+            - **Annual Yield = ($0.24 × 4 / $150.00) × 100 = 0.64%**
+
+            **Usage**:
+            - **Quarterly**: Used for QoQ analysis and trending
+            - **Annual**: Used for comparative analysis and PEGY ratio
+
+            **Purpose**: Shows income return as percentage of stock price.
+            Annual yield is standard for investment comparison.
+            """
+            )
+
+        # Advanced Metrics Section
+        st.subheader("📊 Advanced Financial Metrics")
+
+        with st.expander("**Payout Ratio**", expanded=False):
+            st.markdown(
+                """
+            **Formula**: `PayoutRatio = (Annual Dividends / EPS_TTM) × 100`
+
+            **Example (AAPL)**:
+            - Quarterly Dividend: $0.24
+            - Annual Dividends: $0.24 × 4 = $0.96
+            - EPS TTM: $7.40
+            - **Payout Ratio = ($0.96 / $7.40) × 100 = 13.0%**
+
+            **Purpose**: Shows what percentage of earnings are paid as dividends.
+            Higher ratios may indicate less retained earnings for growth.
+            """
+            )
+
+        with st.expander("**PEG Ratio**", expanded=False):
+            st.markdown(
+                """
+            **Formula**: `PEG = P/E Multiple / Annual EPS Growth Rate`
+
+            **Calculation Steps**:
+            1. Calculate 4-quarter rolling average of EPS QoQ growth
+            2. Annualize: `(1 + quarterly_rate/100)^4 - 1`
+            3. Divide P/E by annualized growth rate
+
+            **Example (AAPL)**:
+            - P/E Multiple: 20.3x
+            - 4Q Avg EPS Growth: 8% quarterly
+            - Annualized Growth: (1.08)^4 - 1 = 36.0%
+            - **PEG Ratio = 20.3 / 36.0 = 0.56**
+
+            **Purpose**: PEG < 1.0 suggests stock may be undervalued relative to
+            growth. Lower is better.
+            """
+            )
+
+        with st.expander("**PEGY Ratio**", expanded=False):
+            st.markdown(
+                """
+            **Formula**: `PEGY = PEG Ratio / Annual Dividend Yield`
+
+            **Example (AAPL)**:
+            - PEG Ratio: 0.56
+            - Annual Dividend Yield: 0.64%
+            - **PEGY Ratio = 0.56 / 0.64 = 0.88**
+
+            **Note**: Uses annualized dividend yield for standard comparison across
+            different payment frequencies.
+
+            **Purpose**: Incorporates dividend income into growth valuation.
+            Lower values suggest better value when considering both growth and income.
+            """
+            )
+
+        # Momentum & Quality Metrics
+        st.subheader("🚀 Momentum & Quality Metrics")
+
+        with st.expander("**EPS Growth Momentum**", expanded=False):
+            st.markdown(
+                """
+            **Formula**: `EPSMomentum = EPS_4Q_Rolling_Avg - EPS_8Q_Rolling_Avg`
+
+            **Example (AAPL)**:
+            - Recent 4Q Average EPS Growth: 12%
+            - Recent 8Q Average EPS Growth: 8%
+            - **EPS Momentum = 12% - 8% = +4.0 percentage points**
+
+            **Interpretation**:
+            - Positive: Earnings growth is accelerating
+            - Negative: Earnings growth is decelerating
+
+            **Purpose**: Identifies whether earnings growth is accelerating or
+            slowing down.
+            """
+            )
+
+        with st.expander("**Price Volatility**", expanded=False):
+            st.markdown(
+                """
+            **Formula**: `PriceVolatility = Standard Deviation of Price_QoQ over
+            8 quarters`
+
+            **Example (AAPL)**:
+            - Last 8 quarters Price QoQ: [15%, -8%, 22%, -12%, 18%, -5%, 25%, -10%]
+            - **Price Volatility = Standard Deviation = 14.2%**
+
+            **Purpose**: Higher values indicate more volatile stock price movements.
+            Risk measure.
+            """
+            )
+
+        with st.expander("**Revenue Consistency**", expanded=False):
+            st.markdown(
+                """
+            **Formula**: `RevenueConsistency = 100 - (Coefficient of Variation × 100)`
+
+            **Where**: `Coefficient of Variation = Standard Deviation / |Mean|`
+
+            **Example (AAPL)**:
+            - 8Q Revenue Growth: Mean = 8%, Std Dev = 3.2%
+            - CV = 3.2% / 8% = 0.40
+            - **Revenue Consistency = 100 - (40) = 60%**
+
+            **Purpose**: Higher scores indicate more consistent revenue growth.
+            Quality measure.
+            """
+            )
+
+        with st.expander("**Dividend Growth Rate**", expanded=False):
+            st.markdown(
+                """
+            **Enhanced Methodology**: Tracks actual dividend progression over time,
+            not just QoQ fluctuations
+
+            **Calculation Steps**:
+            1. **Identify Dividend Change Points**: Find when dividend amount actually
+               changed
+               - Example: $0.24 → $0.25 → $0.26 (actual increases)
+               - Ignores periods where dividend stayed constant
+
+            2. **Calculate Growth Between Changes**:
+               - From $0.24 to $0.25: +4.17% growth
+               - From $0.25 to $0.26: +4.00% growth
+
+            3. **Annualized Growth Rate**:
+               - Formula: `((Last_Dividend / First_Dividend)^(1/Years) - 1) * 100`
+               - If tracked over 3 years: ((0.26/0.24)^(1/3) - 1) * 100 = 2.7% annually
+
+            **Additional Metrics**:
+            - **Dividend Increase Frequency**: How often dividends are raised
+              (increases per year)
+            - **Average Dividend Increase**: Mean percentage increase when
+              dividends are raised
+
+            **Example (AAPL)**:
+            - Dividend progression: $0.22 → $0.23 → $0.24 → $0.25 → $0.26
+            - **Annual Growth Rate: 4.3%**
+            - **Increase Frequency: 1.2 times per year**
+            - **Average Increase: 4.2% when raised**
+
+            **Purpose**: More accurate assessment of dividend growth by focusing on
+            actual progression rather than quarterly noise.
+            """
+            )
+
+        # Relative Performance Metrics
+        st.subheader("📈 Relative Performance Metrics")
+
+        with st.expander("**Sector Rankings**", expanded=False):
+            st.markdown(
+                """
+            **Methodology**: Each ticker is ranked within its sector for key metrics
+
+            **Ranking Logic**:
+            - **Higher is Better**: EPS_TTM, Revenue_TTM, DivYield (Q),
+              DivYieldAnnual, Revenue Consistency, EPS Momentum
+            - **Lower is Better**: P/E Multiple, Price Volatility, PEG Ratio, PEGY Ratio
+
+            **Example (AAPL in Technology)**:
+            - EPS_TTM Sector Rank: 3/25 (3rd highest EPS in Technology)
+            - PEG Ratio Sector Rank: 8/25 (8th lowest PEG in Technology)
+
+            **Purpose**: Shows relative performance within peer group.
+            Rank 1 = best in sector.
+            """
+            )
+
+        with st.expander("**Outperformance Ratios**", expanded=False):
+            st.markdown(
+                """
+            **Formula**: `Outperformance = (Ticker Metric / Benchmark Average) × 100`
+
+            **Benchmarks**:
+            - **Market Outperformance**: vs. all tickers average
+            - **Sector Outperformance**: vs. sector average
+
+            **Example (AAPL)**:
+            - AAPL EPS Growth: 15%
+            - Technology Sector Avg: 12%
+            - Market Avg: 8%
+            - **Sector Outperformance = (15% / 12%) × 100 = 125%**
+            - **Market Outperformance = (15% / 8%) × 100 = 188%**
+
+            **Purpose**: Values >100% indicate outperformance. Shows relative
+            strength vs benchmarks.
+            """
+            )
+
+        with st.expander("**Downside Capture**", expanded=False):
+            st.markdown(
+                """
+            **Formula**: `DownsideCapture = (Avg Ticker Return in Down Markets /
+            Avg Market Return in Down Markets) × 100`
+
+            **Calculation Steps**:
+            1. Identify quarters where market (all tickers avg) was negative
+            2. Calculate average ticker return during those periods
+            3. Calculate average market return during those periods
+            4. Compute ratio
+
+            **Example (AAPL)**:
+            - Down market quarters: Market avg -8%, -12%, -5%
+            - AAPL during same quarters: -6%, -9%, -3%
+            - Market avg during down periods: -8.3%
+            - AAPL avg during down periods: -6.0%
+            - **Downside Capture = (-6.0% / -8.3%) × 100 = 72%**
+
+            **Interpretation**:
+            - **<100%**: Stock falls less than market (defensive)
+            - **>100%**: Stock falls more than market (aggressive)
+
+            **Purpose**: Risk measure. Lower values indicate better downside protection.
+            """
+            )
+
+        # QoQ Rolling Averages
+        st.subheader("📊 Quarter-over-Quarter (QoQ) Analysis")
+
+        with st.expander("**QoQ Calculations & Rolling Averages**", expanded=False):
+            st.markdown(
+                """
+            **QoQ Formula**: `QoQ_Change = ((Current_Quarter - Previous_Quarter) /
+            Previous_Quarter) × 100`
+
+            **Rolling Averages**:
+            - **4Q Rolling**: Average of last 4 quarters QoQ changes
+            - **8Q Rolling**: Average of last 8 quarters QoQ changes
+            - **12Q Rolling**: Average of last 12 quarters QoQ changes
+
+            **Example (AAPL EPS)**:
+            - Q1: $2.00, Q2: $2.20 → QoQ = 10%
+            - Q2: $2.20, Q3: $2.40 → QoQ = 9.1%
+            - Q3: $2.40, Q4: $2.60 → QoQ = 8.3%
+            - Q4: $2.60, Q1: $2.80 → QoQ = 7.7%
+
+            - **4Q Rolling Average = (10% + 9.1% + 8.3% + 7.7%) / 4 = 8.8%**
+
+            **Purpose**: Smooths volatility and shows trends. Longer periods provide
+            more stable indicators.
+            """
+            )
+
+        # Data Notes
+        st.subheader("📝 Important Notes")
+
+        st.info(
+            """
+        **Data Requirements**:
+        - Minimum 4 quarters needed for TTM calculations
+        - Minimum 8 quarters needed for EPS Momentum
+        - Minimum 3 down market periods needed for Downside Capture
+
+        **Handling Missing Data**:
+        - Calculations skip periods with missing data
+        - Results marked as N/A when insufficient data available
+        - Rankings only include tickers with valid data for that metric
+
+        **Frequency**:
+        - All calculations based on quarterly reporting data
+        - Metrics updated each quarter as new data becomes available
+        - Rolling averages provide smoothed trend indicators
+        """
+        )
+
+        st.success(
+            "💡 **Pro Tip**: Use multiple metrics together for comprehensive "
+            "analysis. No single metric tells the complete story!"
+        )
 
 
 if __name__ == "__main__":

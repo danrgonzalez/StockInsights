@@ -109,6 +109,7 @@ def calculate_qoq_changes(df):
             "EPS_TTM",
             "Revenue_TTM",
             "Multiple",
+            "DivAmt",
             "DivYield",
             "DivYieldAnnual",
             "PayoutRatio",

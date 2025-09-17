@@ -16,6 +16,7 @@ except ImportError:
     )
 
 from charts import (
+    create_combined_peg_pegy_chart,
     create_comparison_chart,
     create_eps_prediction_chart,
     create_eps_ttm_prediction_chart,
@@ -43,6 +44,25 @@ st.set_page_config(
 
 
 def main():
+    # Custom CSS to reduce padding between charts
+    st.markdown(
+        """
+    <style>
+    .stPlotlyChart {
+        margin-bottom: -20px !important;
+        margin-top: -10px !important;
+    }
+    .element-container {
+        margin-bottom: 0px !important;
+    }
+    div[data-testid="stVerticalBlock"] > div:has(.stPlotlyChart) {
+        gap: 0.2rem !important;
+    }
+    </style>
+    """,
+        unsafe_allow_html=True,
+    )
+
     st.title("📈 Stock Data Dashboard")
     st.markdown("---")
 
@@ -126,81 +146,354 @@ def main():
         st.markdown("---")
 
         # Charts for individual ticker
-        st.subheader("📊 Absolute Values")
+        st.subheader("📊 Financial Metrics (Last 5 Years)")
+
+        # Two-column layout for all charts
         col1, col2 = st.columns(2)
 
         with col1:
+            # EPS Chart
             eps_chart = create_metric_chart(
-                df, selected_ticker, "EPS", "Earnings Per Share"
+                df, selected_ticker, "EPS", "Earnings Per Share", height=400
             )
             if eps_chart:
                 st.plotly_chart(eps_chart, use_container_width=True)
             else:
                 st.info("No EPS data available for this ticker")
 
+            eps_qoq_chart = create_qoq_chart(
+                df, selected_ticker, "EPS", "EPS", height=240
+            )
+            st.plotly_chart(eps_qoq_chart, use_container_width=True)
+
+            # Revenue Chart
+            revenue_chart = create_metric_chart(
+                df, selected_ticker, "Revenue", "Revenue", height=400
+            )
+            if revenue_chart:
+                st.plotly_chart(revenue_chart, use_container_width=True)
+            else:
+                st.info("No Revenue data available for this ticker")
+
+            revenue_qoq_chart = create_qoq_chart(
+                df, selected_ticker, "Revenue", "Revenue", height=240
+            )
+            st.plotly_chart(revenue_qoq_chart, use_container_width=True)
+
+            # Price Chart
+            price_chart = create_metric_chart(
+                df, selected_ticker, "Price", "Stock Price", height=400
+            )
+            if price_chart:
+                st.plotly_chart(price_chart, use_container_width=True)
+            else:
+                st.info("No Price data available for this ticker")
+
+            price_qoq_chart = create_qoq_chart(
+                df, selected_ticker, "Price", "Price", height=240
+            )
+            st.plotly_chart(price_qoq_chart, use_container_width=True)
+
+            # Dividend Amount Chart
+            div_chart = create_metric_chart(
+                df, selected_ticker, "DivAmt", "Dividend Amount", height=400
+            )
+            if div_chart:
+                st.plotly_chart(div_chart, use_container_width=True)
+            else:
+                st.info("No Dividend data available for this ticker")
+
+            div_amt_qoq_chart = create_qoq_chart(
+                df, selected_ticker, "DivAmt", "Dividend Amount", height=240
+            )
+
+            st.plotly_chart(div_amt_qoq_chart, use_container_width=True)
+
+            # Revenue Consistency Chart
+            revenue_consistency_chart = create_metric_chart(
+                df,
+                selected_ticker,
+                "RevenueConsistency",
+                "Revenue Consistency (% StdDev)",
+                height=400,
+            )
+            if revenue_consistency_chart:
+                st.plotly_chart(revenue_consistency_chart, use_container_width=True)
+            else:
+                st.info("No Revenue Consistency data available for this ticker")
+
+            revenue_consistency_qoq_chart = create_qoq_chart(
+                df,
+                selected_ticker,
+                "RevenueConsistency",
+                "Revenue Consistency",
+                height=240,
+            )
+
+            st.plotly_chart(revenue_consistency_qoq_chart, use_container_width=True)
+
+            # EPS Growth Momentum Chart
+            eps_momentum_chart = create_metric_chart(
+                df,
+                selected_ticker,
+                "EPSMomentum",
+                "EPS Growth Momentum (pp)",
+                height=400,
+            )
+            if eps_momentum_chart:
+                st.plotly_chart(eps_momentum_chart, use_container_width=True)
+            else:
+                st.info("No EPS Growth Momentum data available for this ticker")
+
+            eps_momentum_qoq_chart = create_qoq_chart(
+                df, selected_ticker, "EPSMomentum", "EPS Growth Momentum", height=240
+            )
+
+            st.plotly_chart(eps_momentum_qoq_chart, use_container_width=True)
+
+            # Combined PEG & PEGY Ratios Chart
+            combined_peg_pegy_chart = create_combined_peg_pegy_chart(
+                df, selected_ticker, height=400
+            )
+            if combined_peg_pegy_chart:
+                st.plotly_chart(combined_peg_pegy_chart, use_container_width=True)
+            else:
+                st.info("No PEG or PEGY Ratio data available for this ticker")
+
+            # For QoQ, we'll show PEG QoQ since it's the primary metric
+            peg_ratio_qoq_chart = create_qoq_chart(
+                df, selected_ticker, "PEGRatio", "PEG Ratio", height=240
+            )
+            st.plotly_chart(peg_ratio_qoq_chart, use_container_width=True)
+
+        with col2:
+            # EPS TTM Chart
+            eps_ttm_chart = create_metric_chart(
+                df, selected_ticker, "EPS_TTM", "EPS - TTM", height=400
+            )
+            if eps_ttm_chart:
+                st.plotly_chart(eps_ttm_chart, use_container_width=True)
+            else:
+                st.info("No EPS TTM data available for this ticker")
+
+            eps_ttm_qoq_chart = create_qoq_chart(
+                df, selected_ticker, "EPS_TTM", "EPS TTM", height=240
+            )
+
+            st.plotly_chart(eps_ttm_qoq_chart, use_container_width=True)
+
+            # Revenue TTM Chart
+            revenue_ttm_chart = create_metric_chart(
+                df, selected_ticker, "Revenue_TTM", "Revenue - TTM", height=400
+            )
+            if revenue_ttm_chart:
+                st.plotly_chart(revenue_ttm_chart, use_container_width=True)
+            else:
+                st.info("No Revenue TTM data available for this ticker")
+
+            revenue_ttm_qoq_chart = create_qoq_chart(
+                df, selected_ticker, "Revenue_TTM", "Revenue TTM", height=240
+            )
+
+            st.plotly_chart(revenue_ttm_qoq_chart, use_container_width=True)
+
+            # P/E Multiple Chart
+            multiple_chart = create_metric_chart(
+                df,
+                selected_ticker,
+                "Multiple",
+                "P/E Multiple (Price / EPS TTM)",
+                height=400,
+            )
+            if multiple_chart:
+                st.plotly_chart(multiple_chart, use_container_width=True)
+            else:
+                st.info("No Multiple data available for this ticker")
+
+            multiple_qoq_chart = create_qoq_chart(
+                df, selected_ticker, "Multiple", "P/E Multiple", height=240
+            )
+
+            st.plotly_chart(multiple_qoq_chart, use_container_width=True)
+
+            # Dividend Yield Chart
+            div_yield_chart = create_metric_chart(
+                df,
+                selected_ticker,
+                "DivYield",
+                "Dividend Yield (Dividend / Price)",
+                height=400,
+            )
+            if div_yield_chart:
+                st.plotly_chart(div_yield_chart, use_container_width=True)
+            else:
+                st.info("No Dividend Yield data available for this ticker")
+
+            div_yield_qoq_chart = create_qoq_chart(
+                df, selected_ticker, "DivYield", "Dividend Yield", height=240
+            )
+
+            st.plotly_chart(div_yield_qoq_chart, use_container_width=True)
+
+            # Payout Ratio Chart
+            payout_ratio_chart = create_metric_chart(
+                df,
+                selected_ticker,
+                "PayoutRatio",
+                "Payout Ratio (Dividend / EPS)",
+                height=400,
+            )
+            if payout_ratio_chart:
+                st.plotly_chart(payout_ratio_chart, use_container_width=True)
+            else:
+                st.info("No Payout Ratio data available for this ticker")
+
+            payout_ratio_qoq_chart = create_qoq_chart(
+                df, selected_ticker, "PayoutRatio", "Payout Ratio", height=240
+            )
+
+            st.plotly_chart(payout_ratio_qoq_chart, use_container_width=True)
+
+            # Price Volatility Chart
+            price_volatility_chart = create_metric_chart(
+                df,
+                selected_ticker,
+                "PriceVolatility",
+                "Price Volatility (% StdDev)",
+                height=400,
+            )
+            if price_volatility_chart:
+                st.plotly_chart(price_volatility_chart, use_container_width=True)
+            else:
+                st.info("No Price Volatility data available for this ticker")
+
+            price_volatility_qoq_chart = create_qoq_chart(
+                df, selected_ticker, "PriceVolatility", "Price Volatility", height=240
+            )
+
+            st.plotly_chart(price_volatility_qoq_chart, use_container_width=True)
+
+        # QoQ Summary Section
+        st.subheader("📊 QoQ Change Summary")
+        st.info(
+            "💡 QoQ charts are now paired with their corresponding absolute "
+            "value charts above."
+        )
+        ticker_data = df[df["Ticker"] == selected_ticker]
+
+        qoq_metrics = []
+        for metric in [
+            "EPS",
+            "EPS_TTM",
+            "Revenue",
+            "Revenue_TTM",
+            "Price",
+            "Multiple",
+            "DivAmt",
+            "DivYield",
+            "DivYieldAnnual",
+            "PayoutRatio",
+            "PEGRatio",
+            "EPSMomentum",
+            "PriceVolatility",
+            "RevenueConsistency",
+        ]:
+            qoq_col = f"{metric}_QoQ"
+            if qoq_col in ticker_data.columns:
+                qoq_data = ticker_data[qoq_col].dropna()
+                if not qoq_data.empty:
+                    latest_qoq = qoq_data.iloc[-1] if len(qoq_data) > 0 else None
+                    avg_qoq = qoq_data.mean()
+                    qoq_metrics.append(
+                        {
+                            "Metric": metric,
+                            "Latest QoQ %": (
+                                f"{latest_qoq:.1f}%"
+                                if latest_qoq is not None
+                                else "N/A"
+                            ),
+                            "Average QoQ %": (
+                                f"{avg_qoq:.1f}%" if not np.isnan(avg_qoq) else "N/A"
+                            ),
+                            "Periods with Growth": (
+                                f"{(qoq_data > 0).sum()}/{len(qoq_data)}"
+                            ),
+                        }
+                    )
+
+        if qoq_metrics:
+            qoq_df = pd.DataFrame(qoq_metrics)
+            st.dataframe(qoq_df, use_container_width=True, hide_index=True)
+
         # EPS Prediction Section
         st.subheader("🔮 EPS Prediction")
         prediction = predict_next_eps(df, selected_ticker)
         if prediction:
-            # Three-scenario display
+            # All EPS prediction metrics in one compact row
             st.markdown("**Next Quarter EPS Scenarios:**")
-            col_worst, col_base, col_best = st.columns(3)
+            col1, col2, col3, col4, col5, col6, col7, col8 = st.columns(8)
 
-            with col_worst:
-                st.metric(
-                    "🔴 Worst Case",
-                    f"${prediction['worst_case_eps']:.2f}",
-                    f"{prediction['worst_case_growth']:+.1f}%",
-                    delta_color="inverse",
+            with col1:
+                st.markdown(
+                    f"<small>🔴 **Worst**<br>"
+                    f"${prediction['worst_case_eps']:.2f}<br>"
+                    f"{prediction['worst_case_growth']:+.1f}%</small>",
+                    unsafe_allow_html=True,
                 )
 
-            with col_base:
-                st.metric(
-                    "⭐ Base Case",
-                    f"${prediction['predicted_eps']:.2f}",
-                    f"{prediction['predicted_growth']:+.1f}%",
+            with col2:
+                st.markdown(
+                    f"<small>⭐ **Base**<br>"
+                    f"${prediction['predicted_eps']:.2f}<br>"
+                    f"{prediction['predicted_growth']:+.1f}%</small>",
+                    unsafe_allow_html=True,
                 )
 
-            with col_best:
-                st.metric(
-                    "🟢 Best Case",
-                    f"${prediction['best_case_eps']:.2f}",
-                    f"{prediction['best_case_growth']:+.1f}%",
-                    delta_color="normal",
+            with col3:
+                st.markdown(
+                    f"<small>🟢 **Best**<br>"
+                    f"${prediction['best_case_eps']:.2f}<br>"
+                    f"{prediction['best_case_growth']:+.1f}%</small>",
+                    unsafe_allow_html=True,
                 )
 
-            # Additional metrics row
-            col_current, col_confidence, col_volatility = st.columns(3)
-            with col_current:
-                st.metric("Current EPS", f"${prediction['latest_eps']:.2f}")
+            with col4:
+                st.markdown(
+                    f"<small>**Current**<br>${prediction['latest_eps']:.2f}</small>",
+                    unsafe_allow_html=True,
+                )
 
-            with col_confidence:
+            with col5:
                 confidence_color = {"High": "🟢", "Medium": "🟡", "Low": "🔴"}
-                st.metric(
-                    "Confidence Level",
-                    (
-                        f"{confidence_color.get(prediction['confidence'], '⚪')} "
-                        f"{prediction['confidence']}"
-                    ),
+                st.markdown(
+                    f"<small>**Confidence**<br>{confidence_color.get(prediction['confidence'], '⚪')} "
+                    f"{prediction['confidence']}</small>",
+                    unsafe_allow_html=True,
                 )
 
-            with col_volatility:
-                st.metric("Volatility (±1σ)", f"{prediction['volatility']:.1f}%")
+            with col6:
+                st.markdown(
+                    f"<small>**Volatility**<br>±{prediction['volatility']:.1f}%</small>",
+                    unsafe_allow_html=True,
+                )
 
-            # Scenario range summary
-            range_span = prediction["best_case_eps"] - prediction["worst_case_eps"]
-            range_pct = (
-                (range_span / prediction["predicted_eps"]) * 100
-                if prediction["predicted_eps"] != 0
-                else 0
-            )
+            with col7:
+                range_span = prediction["best_case_eps"] - prediction["worst_case_eps"]
+                range_pct = (
+                    (range_span / prediction["predicted_eps"]) * 100
+                    if prediction["predicted_eps"] != 0
+                    else 0
+                )
+                st.markdown(
+                    f"<small>**Range**<br>${range_span:.2f}<br>({range_pct:.0f}%)</small>",
+                    unsafe_allow_html=True,
+                )
 
-            st.info(
-                f"📊 **Scenario Range**: "
-                f"${prediction['worst_case_eps']:.2f} to "
-                f"${prediction['best_case_eps']:.2f} "
-                f"(${range_span:.2f} spread, {range_pct:.0f}% of base case)"
-            )
+            with col8:
+                st.markdown(
+                    f"<small>**Method**<br>{prediction['methodology'].split('(')[0].strip()}</small>",
+                    unsafe_allow_html=True,
+                )
 
             # Enhanced EPS chart with all scenarios
             eps_pred_chart = create_eps_prediction_chart(df, selected_ticker)
@@ -257,39 +550,36 @@ def main():
         # EPS TTM Prediction Section
         if prediction and prediction["predicted_eps_ttm"] is not None:
             st.subheader("📊 EPS TTM Prediction")
-            st.markdown("**Next Quarter Impact on Trailing Twelve Months:**")
+            st.markdown("**Next Quarter Impact on TTM:**")
 
-            col_ttm_worst, col_ttm_base, col_ttm_best = st.columns(3)
+            # All TTM prediction metrics in one compact row
+            col1, col2, col3, col4, col5, col6, col7 = st.columns(7)
 
-            with col_ttm_worst:
-                st.metric(
-                    "🔴 Worst Case TTM",
-                    f"${prediction['worst_case_eps_ttm']:.2f}",
-                    f"{prediction['worst_case_eps_ttm_growth']:+.1f}%",
-                    delta_color="inverse",
+            with col1:
+                st.markdown(
+                    f"<small>🔴 **Worst TTM**<br>${prediction['worst_case_eps_ttm']:.2f}<br>{prediction['worst_case_eps_ttm_growth']:+.1f}%</small>",
+                    unsafe_allow_html=True,
                 )
 
-            with col_ttm_base:
-                st.metric(
-                    "⭐ Base Case TTM",
-                    f"${prediction['predicted_eps_ttm']:.2f}",
-                    f"{prediction['predicted_eps_ttm_growth']:+.1f}%",
+            with col2:
+                st.markdown(
+                    f"<small>⭐ **Base TTM**<br>${prediction['predicted_eps_ttm']:.2f}<br>{prediction['predicted_eps_ttm_growth']:+.1f}%</small>",
+                    unsafe_allow_html=True,
                 )
 
-            with col_ttm_best:
-                st.metric(
-                    "🟢 Best Case TTM",
-                    f"${prediction['best_case_eps_ttm']:.2f}",
-                    f"{prediction['best_case_eps_ttm_growth']:+.1f}%",
-                    delta_color="normal",
+            with col3:
+                st.markdown(
+                    f"<small>🟢 **Best TTM**<br>${prediction['best_case_eps_ttm']:.2f}<br>{prediction['best_case_eps_ttm_growth']:+.1f}%</small>",
+                    unsafe_allow_html=True,
                 )
 
-            # Current TTM for comparison
-            col_current_ttm, col_ttm_range = st.columns(2)
-            with col_current_ttm:
-                st.metric("Current EPS TTM", f"${prediction['current_eps_ttm']:.2f}")
+            with col4:
+                st.markdown(
+                    f"<small>**Current TTM**<br>${prediction['current_eps_ttm']:.2f}</small>",
+                    unsafe_allow_html=True,
+                )
 
-            with col_ttm_range:
+            with col5:
                 ttm_range_span = (
                     prediction["best_case_eps_ttm"] - prediction["worst_case_eps_ttm"]
                 )
@@ -298,18 +588,24 @@ def main():
                     if prediction["predicted_eps_ttm"] != 0
                     else 0
                 )
-                st.metric(
-                    "TTM Range Spread", f"${ttm_range_span:.2f} ({ttm_range_pct:.0f}%)"
+                st.markdown(
+                    f"<small>**Range**<br>${ttm_range_span:.2f}<br>({ttm_range_pct:.0f}%)</small>",
+                    unsafe_allow_html=True,
                 )
 
-            # TTM Impact explanation
-            st.info(
-                f"📈 **TTM Impact**: The predicted quarter will replace "
-                f"the oldest quarter in the TTM calculation, "
-                f"potentially changing annual earnings by "
-                f"{prediction['predicted_eps_ttm_growth']:+.1f}% in the base case "
-                f"scenario."
-            )
+            with col6:
+                st.markdown(
+                    f"<small>**Impact**<br>{prediction['predicted_eps_ttm_growth']:+.1f}%</small>",
+                    unsafe_allow_html=True,
+                )
+
+            with col7:
+                confidence_color = {"High": "🟢", "Medium": "🟡", "Low": "🔴"}
+                st.markdown(
+                    f"<small>**Confidence**<br>{confidence_color.get(prediction['confidence'], '⚪')} "
+                    f"{prediction['confidence']}</small>",
+                    unsafe_allow_html=True,
+                )
 
             # Enhanced EPS TTM chart with all scenarios
             eps_ttm_pred_chart = create_eps_ttm_prediction_chart(df, selected_ticker)
@@ -351,46 +647,41 @@ def main():
         # Price Prediction Section
         if prediction and prediction["predicted_price"] is not None:
             st.subheader("💰 Price Prediction")
-            st.markdown(
-                "**Multiple-Based Price Scenarios (Current P/E × Predicted EPS TTM):**"
-            )
 
-            col_price_worst, col_price_base, col_price_best = st.columns(3)
+            # All price prediction metrics in one compact row
+            col1, col2, col3, col4, col5, col6, col7, col8 = st.columns(8)
 
-            with col_price_worst:
-                st.metric(
-                    "🔴 Worst Case Price",
-                    f"${prediction['worst_case_price']:.2f}",
-                    f"{prediction['worst_case_price_growth']:+.1f}%",
-                    delta_color="inverse",
+            with col1:
+                st.markdown(
+                    f"<small>🔴 **Worst**<br>${prediction['worst_case_price']:.2f}<br>{prediction['worst_case_price_growth']:+.1f}%</small>",
+                    unsafe_allow_html=True,
                 )
 
-            with col_price_base:
-                st.metric(
-                    "⭐ Base Case Price",
-                    f"${prediction['predicted_price']:.2f}",
-                    f"{prediction['predicted_price_growth']:+.1f}%",
+            with col2:
+                st.markdown(
+                    f"<small>⭐ **Base**<br>${prediction['predicted_price']:.2f}<br>{prediction['predicted_price_growth']:+.1f}%</small>",
+                    unsafe_allow_html=True,
                 )
 
-            with col_price_best:
-                st.metric(
-                    "🟢 Best Case Price",
-                    f"${prediction['best_case_price']:.2f}",
-                    f"{prediction['best_case_price_growth']:+.1f}%",
-                    delta_color="normal",
+            with col3:
+                st.markdown(
+                    f"<small>🟢 **Best**<br>${prediction['best_case_price']:.2f}<br>{prediction['best_case_price_growth']:+.1f}%</small>",
+                    unsafe_allow_html=True,
                 )
 
-            # Additional price metrics
-            col_current_price, col_current_pe, col_price_range = st.columns(3)
-            with col_current_price:
-                st.metric("Current Price", f"${prediction['current_price']:.2f}")
-
-            with col_current_pe:
-                st.metric(
-                    "Current P/E Multiple", f"{prediction['current_multiple']:.1f}x"
+            with col4:
+                st.markdown(
+                    f"<small>**Current**<br>${prediction['current_price']:.2f}</small>",
+                    unsafe_allow_html=True,
                 )
 
-            with col_price_range:
+            with col5:
+                st.markdown(
+                    f"<small>**P/E**<br>{prediction['current_multiple']:.1f}x</small>",
+                    unsafe_allow_html=True,
+                )
+
+            with col6:
                 price_range_span = (
                     prediction["best_case_price"] - prediction["worst_case_price"]
                 )
@@ -399,19 +690,24 @@ def main():
                     if prediction["predicted_price"] != 0
                     else 0
                 )
-                st.metric(
-                    "Price Range Spread",
-                    f"${price_range_span:.2f} ({price_range_pct:.0f}%)",
+                st.markdown(
+                    f"<small>**Range**<br>${price_range_span:.2f}<br>({price_range_pct:.0f}%)</small>",
+                    unsafe_allow_html=True,
                 )
 
-            # Price prediction explanation
-            st.info(
-                f"📈 **Multiple-Based Valuation**: Price predictions assume "
-                f"current P/E multiple ({prediction['current_multiple']:.1f}x) "
-                f"remains constant, applied to predicted EPS TTM scenarios. "
-                f"Base case suggests "
-                f"{prediction['predicted_price_growth']:+.1f}% price movement."
-            )
+            with col7:
+                st.markdown(
+                    f"<small>**Impact**<br>{prediction['predicted_price_growth']:+.1f}%</small>",
+                    unsafe_allow_html=True,
+                )
+
+            with col8:
+                confidence_color = {"High": "🟢", "Medium": "🟡", "Low": "🔴"}
+                st.markdown(
+                    f"<small>**Confidence**<br>{confidence_color.get(prediction['confidence'], '⚪')} "
+                    f"{prediction['confidence']}</small>",
+                    unsafe_allow_html=True,
+                )
 
             # Enhanced Price chart with all scenarios
             price_pred_chart = create_price_prediction_chart(df, selected_ticker)
@@ -465,163 +761,6 @@ def main():
                     "preference"
                 )
 
-        st.markdown("---")
-
-        with col1:
-            # EPS TTM Chart
-            eps_ttm_chart = create_metric_chart(
-                df, selected_ticker, "EPS_TTM", "EPS - Trailing Twelve Months"
-            )
-            if eps_ttm_chart:
-                st.plotly_chart(eps_ttm_chart, use_container_width=True)
-            else:
-                st.info("No EPS TTM data available for this ticker")
-
-            price_chart = create_metric_chart(
-                df, selected_ticker, "Price", "Stock Price"
-            )
-            if price_chart:
-                st.plotly_chart(price_chart, use_container_width=True)
-            else:
-                st.info("No Price data available for this ticker")
-
-            # Multiple Chart (P/E TTM)
-            multiple_chart = create_metric_chart(
-                df, selected_ticker, "Multiple", "P/E Multiple (Price / EPS TTM)"
-            )
-            if multiple_chart:
-                st.plotly_chart(multiple_chart, use_container_width=True)
-            else:
-                st.info("No Multiple data available for this ticker")
-
-        with col2:
-            revenue_chart = create_metric_chart(
-                df, selected_ticker, "Revenue", "Revenue"
-            )
-            if revenue_chart:
-                st.plotly_chart(revenue_chart, use_container_width=True)
-            else:
-                st.info("No Revenue data available for this ticker")
-
-            # Revenue TTM Chart
-            revenue_ttm_chart = create_metric_chart(
-                df, selected_ticker, "Revenue_TTM", "Revenue - Trailing Twelve Months"
-            )
-            if revenue_ttm_chart:
-                st.plotly_chart(revenue_ttm_chart, use_container_width=True)
-            else:
-                st.info("No Revenue TTM data available for this ticker")
-
-            div_chart = create_metric_chart(
-                df, selected_ticker, "DivAmt", "Dividend Amount"
-            )
-            if div_chart:
-                st.plotly_chart(div_chart, use_container_width=True)
-            else:
-                st.info("No Dividend data available for this ticker")
-
-        # QoQ Change Charts
-        st.subheader("📈 Quarter-over-Quarter % Changes")
-        col3, col4 = st.columns(2)
-
-        with col3:
-            eps_qoq_chart = create_qoq_chart(df, selected_ticker, "EPS", "EPS")
-            if eps_qoq_chart:
-                st.plotly_chart(eps_qoq_chart, use_container_width=True)
-            else:
-                st.info("No EPS QoQ data available for this ticker")
-
-            # EPS TTM QoQ Chart
-            eps_ttm_qoq_chart = create_qoq_chart(
-                df, selected_ticker, "EPS_TTM", "EPS TTM"
-            )
-            if eps_ttm_qoq_chart:
-                st.plotly_chart(eps_ttm_qoq_chart, use_container_width=True)
-            else:
-                st.info("No EPS TTM QoQ data available for this ticker")
-
-            price_qoq_chart = create_qoq_chart(df, selected_ticker, "Price", "Price")
-            if price_qoq_chart:
-                st.plotly_chart(price_qoq_chart, use_container_width=True)
-            else:
-                st.info("No Price QoQ data available for this ticker")
-
-            # Multiple QoQ Chart
-            multiple_qoq_chart = create_qoq_chart(
-                df, selected_ticker, "Multiple", "P/E Multiple"
-            )
-            if multiple_qoq_chart:
-                st.plotly_chart(multiple_qoq_chart, use_container_width=True)
-            else:
-                st.info("No Multiple QoQ data available for this ticker")
-
-        with col4:
-            revenue_qoq_chart = create_qoq_chart(
-                df, selected_ticker, "Revenue", "Revenue"
-            )
-            if revenue_qoq_chart:
-                st.plotly_chart(revenue_qoq_chart, use_container_width=True)
-            else:
-                st.info("No Revenue QoQ data available for this ticker")
-
-            # Revenue TTM QoQ Chart
-            revenue_ttm_qoq_chart = create_qoq_chart(
-                df, selected_ticker, "Revenue_TTM", "Revenue TTM"
-            )
-            if revenue_ttm_qoq_chart:
-                st.plotly_chart(revenue_ttm_qoq_chart, use_container_width=True)
-            else:
-                st.info("No Revenue TTM QoQ data available for this ticker")
-
-            # Add QoQ summary stats (including TTM)
-            st.subheader("📊 QoQ Change Summary")
-            ticker_data = df[df["Ticker"] == selected_ticker]
-
-            qoq_metrics = []
-            for metric in [
-                "EPS",
-                "EPS_TTM",
-                "Revenue",
-                "Revenue_TTM",
-                "Price",
-                "Multiple",
-                "DivYield",
-                "DivYieldAnnual",
-                "PayoutRatio",
-                "PEGRatio",
-                "EPSMomentum",
-                "PriceVolatility",
-                "RevenueConsistency",
-            ]:
-                qoq_col = f"{metric}_QoQ"
-                if qoq_col in ticker_data.columns:
-                    qoq_data = ticker_data[qoq_col].dropna()
-                    if not qoq_data.empty:
-                        latest_qoq = qoq_data.iloc[-1] if len(qoq_data) > 0 else None
-                        avg_qoq = qoq_data.mean()
-                        qoq_metrics.append(
-                            {
-                                "Metric": metric,
-                                "Latest QoQ %": (
-                                    f"{latest_qoq:.1f}%"
-                                    if latest_qoq is not None
-                                    else "N/A"
-                                ),
-                                "Average QoQ %": (
-                                    f"{avg_qoq:.1f}%"
-                                    if not np.isnan(avg_qoq)
-                                    else "N/A"
-                                ),
-                                "Periods with Growth": (
-                                    f"{(qoq_data > 0).sum()}/{len(qoq_data)}"
-                                ),
-                            }
-                        )
-
-            if qoq_metrics:
-                qoq_df = pd.DataFrame(qoq_metrics)
-                st.dataframe(qoq_df, use_container_width=True, hide_index=True)
-
         # Raw data table for selected ticker
         st.subheader(f"Raw Data for {selected_ticker}")
         ticker_data = df[df["Ticker"] == selected_ticker]
@@ -631,7 +770,7 @@ def main():
         st.header("Multi-Ticker Comparison")
 
         # Multi-select for tickers
-        default_comparison_tickers = ["AAPL", "GOOGL", "AMZN", "META"]
+        default_comparison_tickers = ["AAPL", "GOOGL", "AMZN", "META", "NVDA", "BRK.B"]
         # Only include tickers that actually exist in the data
         default_tickers = [
             ticker
@@ -663,26 +802,73 @@ def main():
                 "Price",
                 "Multiple",
                 "DivAmt",
+                "DivYield",
+                "PayoutRatio",
+                "PriceVolatility",
+                "RevenueConsistency",
+                "EPSMomentum",
+                "PEGRatio",
+                "PEGYRatio",
+            ]
+
+            # Available QoQ metrics for comparison
+            qoq_metric_options = [
+                "EPS_QoQ",
+                "EPS_TTM_QoQ",
+                "Revenue_QoQ",
+                "Revenue_TTM_QoQ",
+                "Price_QoQ",
+                "Multiple_QoQ",
+                "DivAmt_QoQ",
+                "DivYield_QoQ",
+                "PayoutRatio_QoQ",
+                "PriceVolatility_QoQ",
+                "RevenueConsistency_QoQ",
+                "EPSMomentum_QoQ",
+                "PEGRatio_QoQ",
             ]
             num_charts = st.selectbox(
-                "How many comparison charts would you like?", [1, 2, 3, 4], index=1
+                "How many comparison charts would you like?", [1, 2, 3, 4], index=3
             )
 
             # Create the specified number of charts
             for i in range(num_charts):
-                col1, col2 = st.columns([3, 1])
+                col1, col2, col3 = st.columns([3, 1, 1])
 
                 with col2:
+                    # Chart type selection
+                    chart_type = st.selectbox(
+                        f"Type for Chart {i+1}:",
+                        ["Regular", "QoQ"],
+                        key=f"chart_type_{i}",
+                        index=0,
+                    )
+
+                with col3:
+                    # Metric selection based on chart type
+                    if chart_type == "QoQ":
+                        available_options = qoq_metric_options
+                        metric_key = f"qoq_metric_{i}"
+                    else:
+                        available_options = metric_options
+                        metric_key = f"metric_{i}"
+
                     selected_metric = st.selectbox(
                         f"Metric for Chart {i+1}:",
-                        metric_options,
-                        key=f"metric_{i}",
-                        index=i if i < len(metric_options) else 0,
+                        available_options,
+                        key=metric_key,
+                        index=i if i < len(available_options) else 0,
                     )
 
                 with col1:
-                    # Set y-axis range for "Multiple" metric
-                    yaxis_range = [-1, 60] if selected_metric == "Multiple" else None
+                    # Set y-axis range for specific metrics
+                    if selected_metric == "Multiple":
+                        yaxis_range = [-1, 60]
+                    elif chart_type == "QoQ":
+                        yaxis_range = None  # Let QoQ charts auto-scale
+                    else:
+                        yaxis_range = None
+
                     # Create comparison chart
                     comparison_chart = create_comparison_chart(
                         df, comparison_tickers, selected_metric, yaxis_range=yaxis_range
@@ -735,6 +921,7 @@ def main():
                 "EPS_TTM",
                 "Revenue_TTM",
                 "Price",
+                "DivAmt",
                 "DivYield",
                 "DivYieldAnnual",
                 "PayoutRatio",
@@ -742,9 +929,6 @@ def main():
                 "EPSMomentum",
                 "PriceVolatility",
                 "RevenueConsistency",
-                "DivGrowthRate",
-                "DivIncreaseFreq",
-                "AvgDivIncrease",
             ]:
                 qoq_col = f"{metric}_QoQ"
                 if qoq_col in ticker_data.columns:
@@ -848,6 +1032,7 @@ def main():
                 "EPS_TTM",
                 "Revenue_TTM",
                 "Price",
+                "DivAmt",
                 "DivYield",
                 "DivYieldAnnual",
                 "PayoutRatio",
@@ -882,6 +1067,9 @@ def main():
                 "Price_4Q_Avg": "Price 4Q Avg",
                 "Price_8Q_Avg": "Price 8Q Avg",
                 "Price_12Q_Avg": "Price 12Q Avg",
+                "DivAmt_4Q_Avg": "Div Amount 4Q Avg",
+                "DivAmt_8Q_Avg": "Div Amount 8Q Avg",
+                "DivAmt_12Q_Avg": "Div Amount 12Q Avg",
                 "DivYield_4Q_Avg": "Div Yield Q 4Q Avg",
                 "DivYield_8Q_Avg": "Div Yield Q 8Q Avg",
                 "DivYield_12Q_Avg": "Div Yield Q 12Q Avg",
@@ -894,15 +1082,6 @@ def main():
                 "PEGRatio_4Q_Avg": "PEG Ratio 4Q Avg",
                 "PEGRatio_8Q_Avg": "PEG Ratio 8Q Avg",
                 "PEGRatio_12Q_Avg": "PEG Ratio 12Q Avg",
-                "DivGrowthRate_4Q_Avg": "Div Growth Rate 4Q Avg",
-                "DivGrowthRate_8Q_Avg": "Div Growth Rate 8Q Avg",
-                "DivGrowthRate_12Q_Avg": "Div Growth Rate 12Q Avg",
-                "DivIncreaseFreq_4Q_Avg": "Div Increase Freq 4Q Avg",
-                "DivIncreaseFreq_8Q_Avg": "Div Increase Freq 8Q Avg",
-                "DivIncreaseFreq_12Q_Avg": "Div Increase Freq 12Q Avg",
-                "AvgDivIncrease_4Q_Avg": "Avg Div Increase 4Q Avg",
-                "AvgDivIncrease_8Q_Avg": "Avg Div Increase 8Q Avg",
-                "AvgDivIncrease_12Q_Avg": "Avg Div Increase 12Q Avg",
                 "Latest_Multiple": "Latest P/E Multiple",
                 "Latest_Revenue_TTM": "Latest Revenue TTM ($M)",
             }
@@ -924,7 +1103,7 @@ def main():
                     column_config[col] = st.column_config.NumberColumn(
                         col,
                         format="$%.0f",
-                        help=("Latest Trailing Twelve Months Revenue in " "Millions"),
+                        help=("Latest TTM Revenue in " "Millions"),
                     )
                 else:
                     column_config[col] = st.column_config.NumberColumn(
@@ -1197,7 +1376,7 @@ def main():
         # Core Metrics Section
         st.subheader("🔢 Core Metrics")
 
-        with st.expander("**EPS TTM (Trailing Twelve Months)**", expanded=False):
+        with st.expander("**EPS TTM**", expanded=False):
             st.markdown(
                 """
             **Formula**: `EPS_TTM = Sum of last 4 quarters of EPS`

@@ -2,7 +2,12 @@
   "permissions": {
     "allow": [
       "Bash(python:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Read(//Users/dgonzalez/Library/CloudStorage/GoogleDrive-danrgonzalez@Gmail.com/**)",
+      "Bash(grep:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(sed:*)"
     ],
     "defaultMode": "acceptEdits"
   }

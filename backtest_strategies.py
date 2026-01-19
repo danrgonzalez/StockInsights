@@ -151,15 +151,14 @@ def run_backtest_comparison(df, ticker="AAPL", n_periods=8):
                 )
                 print(f"   📈 Growth Error: {backtest_result['mean_growth_error']:.1f}%")
                 print(f"   🎲 Accuracy Score: {backtest_result['accuracy_score']:.1f}")
-                print(
-                    f"   ✨ Within 10%: {backtest_result['predictions_within_10pct']}/{backtest_result['n_predictions']}"
-                )
-                print(
-                    f"   ⭐ Within 20%: {backtest_result['predictions_within_20pct']}/{backtest_result['n_predictions']}"
-                )
+                within_10 = backtest_result["predictions_within_10pct"]
+                within_20 = backtest_result["predictions_within_20pct"]
+                n_pred = backtest_result["n_predictions"]
+                print(f"   ✨ Within 10%: {within_10}/{n_pred}")
+                print(f"   ⭐ Within 20%: {within_20}/{n_pred}")
 
             else:
-                print(f"   ❌ Strategy failed - insufficient data")
+                print("   ❌ Strategy failed - insufficient data")
                 results[strategy_name] = None
 
         except Exception as e:
@@ -273,13 +272,13 @@ def print_detailed_comparison(results):
 
         print(f"\n{emoji} {row['Strategy'].upper()}")
         print(f"   🎯 Accuracy Score: {row['Accuracy Score']:.1f} (lower is better)")
-        print(
-            f"   📊 Mean Error: {row['Mean % Error']:.1f}% | Median: {row['Median % Error']:.1f}%"
-        )
+        mean_err = row["Mean % Error"]
+        median_err = row["Median % Error"]
+        print(f"   📊 Mean Error: {mean_err:.1f}% | Median: {median_err:.1f}%")
         print(f"   📈 Growth Prediction Error: {row['Growth Error']:.1f}%")
-        print(
-            f"   ✅ Success Rates: {row['Success Rate 10%']:.0f}% (±10%) | {row['Success Rate 20%']:.0f}% (±20%)"
-        )
+        rate_10 = row["Success Rate 10%"]
+        rate_20 = row["Success Rate 20%"]
+        print(f"   ✅ Success Rates: {rate_10:.0f}% (±10%) | {rate_20:.0f}% (±20%)")
         print(f"   📐 RMSE: {row['RMSE']:.4f}")
 
     print("\n" + "=" * 80)

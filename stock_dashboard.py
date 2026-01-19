@@ -465,33 +465,36 @@ def main():
 
             with col5:
                 confidence_color = {"High": "🟢", "Medium": "🟡", "Low": "🔴"}
+                conf = prediction["confidence"]
+                conf_icon = confidence_color.get(conf, "⚪")
                 st.markdown(
-                    f"<small>**Confidence**<br>{confidence_color.get(prediction['confidence'], '⚪')} "
-                    f"{prediction['confidence']}</small>",
+                    f"<small>**Confidence**<br>{conf_icon} {conf}</small>",
                     unsafe_allow_html=True,
                 )
 
             with col6:
+                vol = prediction["volatility"]
                 st.markdown(
-                    f"<small>**Volatility**<br>±{prediction['volatility']:.1f}%</small>",
+                    f"<small>**Volatility**<br>±{vol:.1f}%</small>",
                     unsafe_allow_html=True,
                 )
 
             with col7:
-                range_span = prediction["best_case_eps"] - prediction["worst_case_eps"]
-                range_pct = (
-                    (range_span / prediction["predicted_eps"]) * 100
-                    if prediction["predicted_eps"] != 0
-                    else 0
-                )
+                best = prediction["best_case_eps"]
+                worst = prediction["worst_case_eps"]
+                range_span = best - worst
+                pred_eps = prediction["predicted_eps"]
+                range_pct = (range_span / pred_eps) * 100 if pred_eps != 0 else 0
                 st.markdown(
-                    f"<small>**Range**<br>${range_span:.2f}<br>({range_pct:.0f}%)</small>",
+                    f"<small>**Range**<br>${range_span:.2f}"
+                    f"<br>({range_pct:.0f}%)</small>",
                     unsafe_allow_html=True,
                 )
 
             with col8:
+                method = prediction["methodology"].split("(")[0].strip()
                 st.markdown(
-                    f"<small>**Method**<br>{prediction['methodology'].split('(')[0].strip()}</small>",
+                    f"<small>**Method**<br>{method}</small>",
                     unsafe_allow_html=True,
                 )
 
@@ -556,54 +559,62 @@ def main():
             col1, col2, col3, col4, col5, col6, col7 = st.columns(7)
 
             with col1:
+                worst_ttm = prediction["worst_case_eps_ttm"]
+                worst_ttm_g = prediction["worst_case_eps_ttm_growth"]
                 st.markdown(
-                    f"<small>🔴 **Worst TTM**<br>${prediction['worst_case_eps_ttm']:.2f}<br>{prediction['worst_case_eps_ttm_growth']:+.1f}%</small>",
+                    f"<small>🔴 **Worst TTM**<br>${worst_ttm:.2f}"
+                    f"<br>{worst_ttm_g:+.1f}%</small>",
                     unsafe_allow_html=True,
                 )
 
             with col2:
+                pred_ttm = prediction["predicted_eps_ttm"]
+                pred_ttm_g = prediction["predicted_eps_ttm_growth"]
                 st.markdown(
-                    f"<small>⭐ **Base TTM**<br>${prediction['predicted_eps_ttm']:.2f}<br>{prediction['predicted_eps_ttm_growth']:+.1f}%</small>",
+                    f"<small>⭐ **Base TTM**<br>${pred_ttm:.2f}"
+                    f"<br>{pred_ttm_g:+.1f}%</small>",
                     unsafe_allow_html=True,
                 )
 
             with col3:
+                best_ttm = prediction["best_case_eps_ttm"]
+                best_ttm_g = prediction["best_case_eps_ttm_growth"]
                 st.markdown(
-                    f"<small>🟢 **Best TTM**<br>${prediction['best_case_eps_ttm']:.2f}<br>{prediction['best_case_eps_ttm_growth']:+.1f}%</small>",
+                    f"<small>🟢 **Best TTM**<br>${best_ttm:.2f}"
+                    f"<br>{best_ttm_g:+.1f}%</small>",
                     unsafe_allow_html=True,
                 )
 
             with col4:
+                curr_ttm = prediction["current_eps_ttm"]
                 st.markdown(
-                    f"<small>**Current TTM**<br>${prediction['current_eps_ttm']:.2f}</small>",
+                    f"<small>**Current TTM**<br>${curr_ttm:.2f}</small>",
                     unsafe_allow_html=True,
                 )
 
             with col5:
-                ttm_range_span = (
-                    prediction["best_case_eps_ttm"] - prediction["worst_case_eps_ttm"]
-                )
+                ttm_range_span = best_ttm - worst_ttm
                 ttm_range_pct = (
-                    (ttm_range_span / prediction["predicted_eps_ttm"]) * 100
-                    if prediction["predicted_eps_ttm"] != 0
-                    else 0
+                    (ttm_range_span / pred_ttm) * 100 if pred_ttm != 0 else 0
                 )
                 st.markdown(
-                    f"<small>**Range**<br>${ttm_range_span:.2f}<br>({ttm_range_pct:.0f}%)</small>",
+                    f"<small>**Range**<br>${ttm_range_span:.2f}"
+                    f"<br>({ttm_range_pct:.0f}%)</small>",
                     unsafe_allow_html=True,
                 )
 
             with col6:
                 st.markdown(
-                    f"<small>**Impact**<br>{prediction['predicted_eps_ttm_growth']:+.1f}%</small>",
+                    f"<small>**Impact**<br>{pred_ttm_g:+.1f}%</small>",
                     unsafe_allow_html=True,
                 )
 
             with col7:
                 confidence_color = {"High": "🟢", "Medium": "🟡", "Low": "🔴"}
+                conf = prediction["confidence"]
+                conf_icon = confidence_color.get(conf, "⚪")
                 st.markdown(
-                    f"<small>**Confidence**<br>{confidence_color.get(prediction['confidence'], '⚪')} "
-                    f"{prediction['confidence']}</small>",
+                    f"<small>**Confidence**<br>{conf_icon} {conf}</small>",
                     unsafe_allow_html=True,
                 )
 
@@ -652,60 +663,69 @@ def main():
             col1, col2, col3, col4, col5, col6, col7, col8 = st.columns(8)
 
             with col1:
+                worst_p = prediction["worst_case_price"]
+                worst_p_g = prediction["worst_case_price_growth"]
                 st.markdown(
-                    f"<small>🔴 **Worst**<br>${prediction['worst_case_price']:.2f}<br>{prediction['worst_case_price_growth']:+.1f}%</small>",
+                    f"<small>🔴 **Worst**<br>${worst_p:.2f}"
+                    f"<br>{worst_p_g:+.1f}%</small>",
                     unsafe_allow_html=True,
                 )
 
             with col2:
+                pred_p = prediction["predicted_price"]
+                pred_p_g = prediction["predicted_price_growth"]
                 st.markdown(
-                    f"<small>⭐ **Base**<br>${prediction['predicted_price']:.2f}<br>{prediction['predicted_price_growth']:+.1f}%</small>",
+                    f"<small>⭐ **Base**<br>${pred_p:.2f}"
+                    f"<br>{pred_p_g:+.1f}%</small>",
                     unsafe_allow_html=True,
                 )
 
             with col3:
+                best_p = prediction["best_case_price"]
+                best_p_g = prediction["best_case_price_growth"]
                 st.markdown(
-                    f"<small>🟢 **Best**<br>${prediction['best_case_price']:.2f}<br>{prediction['best_case_price_growth']:+.1f}%</small>",
+                    f"<small>🟢 **Best**<br>${best_p:.2f}"
+                    f"<br>{best_p_g:+.1f}%</small>",
                     unsafe_allow_html=True,
                 )
 
             with col4:
+                curr_p = prediction["current_price"]
                 st.markdown(
-                    f"<small>**Current**<br>${prediction['current_price']:.2f}</small>",
+                    f"<small>**Current**<br>${curr_p:.2f}</small>",
                     unsafe_allow_html=True,
                 )
 
             with col5:
+                mult = prediction["current_multiple"]
                 st.markdown(
-                    f"<small>**P/E**<br>{prediction['current_multiple']:.1f}x</small>",
+                    f"<small>**P/E**<br>{mult:.1f}x</small>",
                     unsafe_allow_html=True,
                 )
 
             with col6:
-                price_range_span = (
-                    prediction["best_case_price"] - prediction["worst_case_price"]
-                )
+                price_range_span = best_p - worst_p
                 price_range_pct = (
-                    (price_range_span / prediction["predicted_price"]) * 100
-                    if prediction["predicted_price"] != 0
-                    else 0
+                    (price_range_span / pred_p) * 100 if pred_p != 0 else 0
                 )
                 st.markdown(
-                    f"<small>**Range**<br>${price_range_span:.2f}<br>({price_range_pct:.0f}%)</small>",
+                    f"<small>**Range**<br>${price_range_span:.2f}"
+                    f"<br>({price_range_pct:.0f}%)</small>",
                     unsafe_allow_html=True,
                 )
 
             with col7:
                 st.markdown(
-                    f"<small>**Impact**<br>{prediction['predicted_price_growth']:+.1f}%</small>",
+                    f"<small>**Impact**<br>{pred_p_g:+.1f}%</small>",
                     unsafe_allow_html=True,
                 )
 
             with col8:
                 confidence_color = {"High": "🟢", "Medium": "🟡", "Low": "🔴"}
+                conf = prediction["confidence"]
+                conf_icon = confidence_color.get(conf, "⚪")
                 st.markdown(
-                    f"<small>**Confidence**<br>{confidence_color.get(prediction['confidence'], '⚪')} "
-                    f"{prediction['confidence']}</small>",
+                    f"<small>**Confidence**<br>{conf_icon} {conf}</small>",
                     unsafe_allow_html=True,
                 )
 

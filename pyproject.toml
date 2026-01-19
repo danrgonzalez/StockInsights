@@ -22,7 +22,7 @@ extend-exclude = '''
 profile = "black"
 multi_line_output = 3
 line_length = 88
-known_first_party = ["stock_classifications", "data_utils", "charts", "ui_components"]
+known_first_party = ["core", "stock_classifications", "data_utils", "charts", "ui_components", "strategies", "backtest_strategies", "multi_ticker_backtest"]
 
 [tool.autoflake]
 remove-all-unused-imports = true

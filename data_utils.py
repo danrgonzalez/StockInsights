@@ -1,3 +1,21 @@
+"""
+Data utilities module for the Streamlit dashboard.
+
+This module provides Streamlit-compatible data processing functions.
+For non-Streamlit applications (CLI, API, batch processing), you can
+import directly from the core module:
+
+    from core import (
+        load_stock_data,
+        calculate_qoq_changes,
+        calculate_sector_rankings,
+        predict_next_eps,
+    )
+
+The core module has no Streamlit dependencies and can be used in any
+Python application.
+"""
+
 import numpy as np
 import pandas as pd
 import streamlit as st

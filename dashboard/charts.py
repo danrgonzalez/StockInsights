@@ -1,7 +1,7 @@
 import plotly.express as px
 import plotly.graph_objects as go
 
-from data_utils import predict_next_eps
+from dashboard.data_utils import predict_next_eps
 
 
 def create_metric_chart(df, ticker, metric, title, height=400):

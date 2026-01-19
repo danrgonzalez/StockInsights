@@ -4,7 +4,7 @@ import streamlit as st
 
 # Import the stock classifications module (without calling st.warning yet)
 try:
-    from stock_classifications import get_stock_classification
+    from core.classifications import get_stock_classification
 
     CLASSIFICATIONS_AVAILABLE = True
     CLASSIFICATION_ERROR = None
@@ -15,7 +15,7 @@ except ImportError:
         "Classification data will not be available."
     )
 
-from charts import (
+from dashboard.charts import (
     create_combined_peg_pegy_chart,
     create_comparison_chart,
     create_eps_prediction_chart,
@@ -24,7 +24,7 @@ from charts import (
     create_price_prediction_chart,
     create_qoq_chart,
 )
-from data_utils import (
+from dashboard.data_utils import (
     calculate_downside_capture,
     calculate_outperformance_ratios,
     calculate_qoq_changes,
@@ -32,7 +32,7 @@ from data_utils import (
     load_data,
     predict_next_eps,
 )
-from ui_components import display_summary_stats
+from dashboard.ui_components import display_summary_stats
 
 # MUST be the very first Streamlit command
 st.set_page_config(
@@ -79,7 +79,7 @@ def main():
     )
 
     # Default file path
-    default_file = "StockData_Indexed.xlsx"
+    default_file = "data/StockData_Indexed.xlsx"
 
     # Load data
     if uploaded_file is not None:

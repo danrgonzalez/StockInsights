@@ -24,22 +24,22 @@ def run_stock_indexer():
     print("=" * 60)
 
     # Check if the indexer script exists
-    if not check_file_exists("stock_indexer.py"):
-        print("ERROR: stock_indexer.py not found in current directory!")
-        print("Please ensure stock_indexer.py is in the same folder as this script.")
+    if not check_file_exists("scripts/indexer.py"):
+        print("ERROR: scripts/indexer.py not found!")
+        print("Please ensure you're running from the project root directory.")
         return False
 
     # Check if the input file exists
-    if not check_file_exists("StockData.xlsx"):
-        print("ERROR: StockData.xlsx not found in current directory!")
-        print("Please ensure StockData.xlsx is in the same folder as this script.")
+    if not check_file_exists("data/StockData.xlsx"):
+        print("ERROR: data/StockData.xlsx not found!")
+        print("Please ensure data/StockData.xlsx exists.")
         return False
 
     try:
         # Run the stock indexer
-        print("Running stock_indexer.py...")
+        print("Running scripts/indexer.py...")
         result = subprocess.run(
-            [sys.executable, "stock_indexer.py"],
+            [sys.executable, "scripts/indexer.py"],
             capture_output=True,
             text=True,
             check=True,
@@ -52,11 +52,11 @@ def run_stock_indexer():
             print(result.stderr)
 
         # Check if the output file was created
-        if check_file_exists("StockData_Indexed.xlsx"):
-            print("StockData_Indexed.xlsx created successfully!")
+        if check_file_exists("data/StockData_Indexed.xlsx"):
+            print("data/StockData_Indexed.xlsx created successfully!")
             return True
         else:
-            print("ERROR: StockData_Indexed.xlsx was not created!")
+            print("ERROR: data/StockData_Indexed.xlsx was not created!")
             return False
     except subprocess.CalledProcessError as e:
         print(f"ERROR running stock indexer: {e}")
@@ -75,9 +75,9 @@ def launch_dashboard():
     print("=" * 60)
 
     # Check if the dashboard script exists
-    if not check_file_exists("stock_dashboard.py"):
-        print("ERROR: stock_dashboard.py not found in current directory!")
-        print("Please ensure stock_dashboard.py is in the same folder as this script.")
+    if not check_file_exists("dashboard/app.py"):
+        print("ERROR: dashboard/app.py not found!")
+        print("Please ensure you're running from the project root directory.")
         return False
 
     try:
@@ -91,7 +91,7 @@ def launch_dashboard():
         time.sleep(2)
 
         # Launch Streamlit
-        subprocess.run([sys.executable, "-m", "streamlit", "run", "stock_dashboard.py"])
+        subprocess.run([sys.executable, "-m", "streamlit", "run", "dashboard/app.py"])
 
     except KeyboardInterrupt:
         print("\n\nDashboard stopped by user.")
@@ -116,10 +116,10 @@ def check_dependencies():
     for package in required_packages:
         try:
             __import__(package)
-            print(f"✓ {package}")
+            print(f"  {package}")
         except ImportError:
             missing_packages.append(package)
-            print(f"✗ {package} - MISSING")
+            print(f"  {package} - MISSING")
 
     if missing_packages:
         print(f"\nERROR: Missing required packages: {', '.join(missing_packages)}")
@@ -129,7 +129,7 @@ def check_dependencies():
         print(f"pip install {' '.join(missing_packages)}")
         return False
 
-    print("✓ All dependencies are installed!")
+    print("All dependencies are installed!")
     return True
 
 
@@ -143,15 +143,15 @@ def main():
     print(f"Working directory: {current_dir}")
 
     # List relevant files in current directory
-    print("\nFiles in current directory:")
+    print("\nFiles check:")
     for file in [
-        "stock_indexer.py",
-        "stock_dashboard.py",
-        "StockData.xlsx",
-        "StockData_Indexed.xlsx",
+        "scripts/indexer.py",
+        "dashboard/app.py",
+        "data/StockData.xlsx",
+        "data/StockData_Indexed.xlsx",
     ]:
-        status = "✓" if check_file_exists(file) else "✗"
-        print(f"  {status} {file}")
+        status = "OK" if check_file_exists(file) else "MISSING"
+        print(f"  [{status}] {file}")
 
     print("\n" + "=" * 60)
 
@@ -169,18 +169,9 @@ def main():
         print("\nWorkflow aborted due to indexer failure.")
         return
 
-    # Ask user if they want to proceed to dashboard
-    print("\n" + "=" * 60)
-    response = (
-        input("Stock indexing completed! Launch dashboard? (y/n): ").lower().strip()
-    )
-
-    if response in ["y", "yes", ""]:
-        # Step 2: Launch the dashboard
-        launch_dashboard()
-    else:
-        print("Dashboard launch skipped. You can run it manually with:")
-        print("streamlit run stock_dashboard.py")
+    # Step 2: Launch the dashboard immediately
+    print("\nData preprocessing completed successfully!")
+    launch_dashboard()
 
     print("\nWorkflow completed!")
 

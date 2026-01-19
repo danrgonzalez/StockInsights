@@ -31,7 +31,7 @@ def load_stock_data(file_path: str) -> pd.DataFrame | None:
         # Clean and normalize ticker symbols
         if "Ticker" in df.columns:
             try:
-                from stock_classifications import normalize_symbol
+                from core.classifications import normalize_symbol
 
                 df["Ticker"] = df["Ticker"].astype(str).apply(normalize_symbol)
             except ImportError:

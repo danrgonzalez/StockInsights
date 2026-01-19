@@ -20,8 +20,8 @@ def predict_next_eps(df: pd.DataFrame, ticker: str) -> dict | None:
     Returns:
         Prediction results with comprehensive scenarios, or None if insufficient data
     """
-    from multi_ticker_backtest import get_ticker_strategy
-    from strategies import get_strategy
+    from core.backtesting import get_ticker_strategy
+    from core.strategies import get_strategy
 
     ticker_data = df[df["Ticker"] == ticker].copy()
     ticker_data = ticker_data.sort_values("Index")

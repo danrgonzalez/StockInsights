@@ -61,9 +61,9 @@ def load_csv_simple_moving_avg(csv_path):
                 # Skip non-numeric values like "loading"
                 continue
 
-            # Normalize symbol like in stock_classifications
+            # Normalize symbol like in core.classifications
             try:
-                from stock_classifications import normalize_symbol
+                from core.classifications import normalize_symbol
 
                 normalized_symbol = normalize_symbol(symbol)
             except ImportError:
@@ -138,7 +138,7 @@ def process_stock_data(file_path, csv_path=None):
         for ticker in df["Ticker"].unique():
             # Normalize ticker symbol for matching
             try:
-                from stock_classifications import normalize_symbol
+                from core.classifications import normalize_symbol
 
                 normalized_ticker = normalize_symbol(ticker)
             except ImportError:
@@ -380,7 +380,7 @@ def get_latest_csv_file():
     Returns:
         str: Path to the latest CSV file, or None if no files found
     """
-    csv_files = glob.glob("quotes/*-Quote.csv")
+    csv_files = glob.glob("data/quotes/*-Quote.csv")
     if not csv_files:
         return None
 
@@ -407,12 +407,12 @@ def get_latest_csv_file():
 
 
 def main():
-    input_file = "StockData.xlsx"
+    input_file = "data/StockData.xlsx"
     csv_file = get_latest_csv_file()
-    output_file = "StockData_Indexed.xlsx"
+    output_file = "data/StockData_Indexed.xlsx"
 
     if csv_file is None:
-        print("Warning: No CSV files found in quotes directory")
+        print("Warning: No CSV files found in data/quotes directory")
         csv_file = None
 
     try:

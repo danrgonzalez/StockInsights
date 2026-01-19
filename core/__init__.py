@@ -20,7 +20,7 @@ Example usage:
     )
 
     # Load and process data
-    df = load_stock_data("StockData_Indexed.xlsx")
+    df = load_stock_data("data/StockData_Indexed.xlsx")
     df = calculate_qoq_changes(df)
     df = calculate_sector_rankings(df)
 
@@ -28,6 +28,29 @@ Example usage:
     prediction = predict_next_eps(df, "AAPL")
 """
 
+# Backtesting
+from core.backtesting import (
+    backtest_strategy,
+    get_best_strategy,
+    get_ticker_strategy,
+    load_ticker_strategy_mapping,
+    run_backtest_comparison,
+    run_multi_ticker_backtest,
+    save_ticker_strategy_mapping,
+)
+
+# Classifications
+from core.classifications import (
+    Industry,
+    Sector,
+    StockClassification,
+    StockSymbol,
+    SubIndustry,
+    get_stock_classification,
+    get_stocks_by_industry,
+    get_stocks_by_sector,
+    normalize_symbol,
+)
 from core.data_processing import (
     calculate_downside_capture,
     calculate_outperformance_ratios,
@@ -36,6 +59,17 @@ from core.data_processing import (
     load_stock_data,
 )
 from core.predictions import predict_next_eps
+
+# Strategies
+from core.strategies import (
+    get_all_strategies,
+    get_strategy,
+    momentum_strategy,
+    seasonal_strategy,
+    simple_average_strategy,
+    trend_analysis_strategy,
+    weighted_growth_strategy,
+)
 
 __all__ = [
     # Data loading
@@ -47,6 +81,32 @@ __all__ = [
     "calculate_downside_capture",
     # Predictions
     "predict_next_eps",
+    # Strategies
+    "get_all_strategies",
+    "get_strategy",
+    "weighted_growth_strategy",
+    "simple_average_strategy",
+    "momentum_strategy",
+    "trend_analysis_strategy",
+    "seasonal_strategy",
+    # Backtesting
+    "backtest_strategy",
+    "run_backtest_comparison",
+    "run_multi_ticker_backtest",
+    "get_best_strategy",
+    "get_ticker_strategy",
+    "load_ticker_strategy_mapping",
+    "save_ticker_strategy_mapping",
+    # Classifications
+    "Sector",
+    "Industry",
+    "SubIndustry",
+    "StockSymbol",
+    "StockClassification",
+    "get_stock_classification",
+    "get_stocks_by_sector",
+    "get_stocks_by_industry",
+    "normalize_symbol",
 ]
 
 __version__ = "1.0.0"

@@ -35,7 +35,7 @@ def load_data(file_path):
         if "Ticker" in df.columns:
             # Import normalization function if available
             try:
-                from stock_classifications import normalize_symbol
+                from core.classifications import normalize_symbol
 
                 df["Ticker"] = df["Ticker"].astype(str).apply(normalize_symbol)
             except ImportError:
@@ -289,8 +289,8 @@ def predict_next_eps(df, ticker):
     Returns:
         dict or None: Prediction results with comprehensive scenarios
     """
-    from multi_ticker_backtest import get_ticker_strategy
-    from strategies import get_strategy
+    from core.backtesting import get_ticker_strategy
+    from core.strategies import get_strategy
 
     ticker_data = df[df["Ticker"] == ticker].copy()
     ticker_data = ticker_data.sort_values("Index")

@@ -1,21 +1,20 @@
-import numpy as np
-import pandas as pd
-import streamlit as st
+import sys
+from pathlib import Path
 
-# Import the stock classifications module (without calling st.warning yet)
-try:
-    from core.classifications import get_stock_classification
+# Add project root to path for imports when running via streamlit
+project_root = Path(__file__).parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
 
-    CLASSIFICATIONS_AVAILABLE = True
-    CLASSIFICATION_ERROR = None
-except ImportError:
-    CLASSIFICATIONS_AVAILABLE = False
-    CLASSIFICATION_ERROR = (
-        "Stock classifications module not found. "
-        "Classification data will not be available."
-    )
+import numpy as np  # noqa: E402
+import pandas as pd  # noqa: E402
+import streamlit as st  # noqa: E402
 
-from dashboard.charts import (
+from core.classifications import get_stock_classification  # noqa: E402
+
+CLASSIFICATIONS_AVAILABLE = True
+
+from dashboard.charts import (  # noqa: E402
     create_combined_peg_pegy_chart,
     create_comparison_chart,
     create_eps_prediction_chart,
@@ -24,7 +23,7 @@ from dashboard.charts import (
     create_price_prediction_chart,
     create_qoq_chart,
 )
-from dashboard.data_utils import (
+from dashboard.data_utils import (  # noqa: E402
     calculate_downside_capture,
     calculate_outperformance_ratios,
     calculate_qoq_changes,
@@ -32,7 +31,7 @@ from dashboard.data_utils import (
     load_data,
     predict_next_eps,
 )
-from dashboard.ui_components import display_summary_stats
+from dashboard.ui_components import display_summary_stats  # noqa: E402
 
 # MUST be the very first Streamlit command
 st.set_page_config(
@@ -65,11 +64,6 @@ def main():
 
     st.title("📈 Stock Data Dashboard")
     st.markdown("---")
-
-    # Now display the classification warning if needed
-    # (after st.set_page_config)
-    if not CLASSIFICATIONS_AVAILABLE:
-        st.warning(CLASSIFICATION_ERROR)
 
     # File upload or default file
     uploaded_file = st.file_uploader(
@@ -157,49 +151,49 @@ def main():
                 df, selected_ticker, "EPS", "Earnings Per Share", height=400
             )
             if eps_chart:
-                st.plotly_chart(eps_chart, use_container_width=True)
+                st.plotly_chart(eps_chart, width="stretch")
             else:
                 st.info("No EPS data available for this ticker")
 
             eps_qoq_chart = create_qoq_chart(
                 df, selected_ticker, "EPS", "EPS", height=240
             )
-            st.plotly_chart(eps_qoq_chart, use_container_width=True)
+            st.plotly_chart(eps_qoq_chart, width="stretch")
 
             # Revenue Chart
             revenue_chart = create_metric_chart(
                 df, selected_ticker, "Revenue", "Revenue", height=400
             )
             if revenue_chart:
-                st.plotly_chart(revenue_chart, use_container_width=True)
+                st.plotly_chart(revenue_chart, width="stretch")
             else:
                 st.info("No Revenue data available for this ticker")
 
             revenue_qoq_chart = create_qoq_chart(
                 df, selected_ticker, "Revenue", "Revenue", height=240
             )
-            st.plotly_chart(revenue_qoq_chart, use_container_width=True)
+            st.plotly_chart(revenue_qoq_chart, width="stretch")
 
             # Price Chart
             price_chart = create_metric_chart(
                 df, selected_ticker, "Price", "Stock Price", height=400
             )
             if price_chart:
-                st.plotly_chart(price_chart, use_container_width=True)
+                st.plotly_chart(price_chart, width="stretch")
             else:
                 st.info("No Price data available for this ticker")
 
             price_qoq_chart = create_qoq_chart(
                 df, selected_ticker, "Price", "Price", height=240
             )
-            st.plotly_chart(price_qoq_chart, use_container_width=True)
+            st.plotly_chart(price_qoq_chart, width="stretch")
 
             # Dividend Amount Chart
             div_chart = create_metric_chart(
                 df, selected_ticker, "DivAmt", "Dividend Amount", height=400
             )
             if div_chart:
-                st.plotly_chart(div_chart, use_container_width=True)
+                st.plotly_chart(div_chart, width="stretch")
             else:
                 st.info("No Dividend data available for this ticker")
 
@@ -207,7 +201,7 @@ def main():
                 df, selected_ticker, "DivAmt", "Dividend Amount", height=240
             )
 
-            st.plotly_chart(div_amt_qoq_chart, use_container_width=True)
+            st.plotly_chart(div_amt_qoq_chart, width="stretch")
 
             # Revenue Consistency Chart
             revenue_consistency_chart = create_metric_chart(
@@ -218,7 +212,7 @@ def main():
                 height=400,
             )
             if revenue_consistency_chart:
-                st.plotly_chart(revenue_consistency_chart, use_container_width=True)
+                st.plotly_chart(revenue_consistency_chart, width="stretch")
             else:
                 st.info("No Revenue Consistency data available for this ticker")
 
@@ -230,7 +224,7 @@ def main():
                 height=240,
             )
 
-            st.plotly_chart(revenue_consistency_qoq_chart, use_container_width=True)
+            st.plotly_chart(revenue_consistency_qoq_chart, width="stretch")
 
             # EPS Growth Momentum Chart
             eps_momentum_chart = create_metric_chart(
@@ -241,7 +235,7 @@ def main():
                 height=400,
             )
             if eps_momentum_chart:
-                st.plotly_chart(eps_momentum_chart, use_container_width=True)
+                st.plotly_chart(eps_momentum_chart, width="stretch")
             else:
                 st.info("No EPS Growth Momentum data available for this ticker")
 
@@ -249,14 +243,14 @@ def main():
                 df, selected_ticker, "EPSMomentum", "EPS Growth Momentum", height=240
             )
 
-            st.plotly_chart(eps_momentum_qoq_chart, use_container_width=True)
+            st.plotly_chart(eps_momentum_qoq_chart, width="stretch")
 
             # Combined PEG & PEGY Ratios Chart
             combined_peg_pegy_chart = create_combined_peg_pegy_chart(
                 df, selected_ticker, height=400
             )
             if combined_peg_pegy_chart:
-                st.plotly_chart(combined_peg_pegy_chart, use_container_width=True)
+                st.plotly_chart(combined_peg_pegy_chart, width="stretch")
             else:
                 st.info("No PEG or PEGY Ratio data available for this ticker")
 
@@ -264,7 +258,7 @@ def main():
             peg_ratio_qoq_chart = create_qoq_chart(
                 df, selected_ticker, "PEGRatio", "PEG Ratio", height=240
             )
-            st.plotly_chart(peg_ratio_qoq_chart, use_container_width=True)
+            st.plotly_chart(peg_ratio_qoq_chart, width="stretch")
 
         with col2:
             # EPS TTM Chart
@@ -272,7 +266,7 @@ def main():
                 df, selected_ticker, "EPS_TTM", "EPS - TTM", height=400
             )
             if eps_ttm_chart:
-                st.plotly_chart(eps_ttm_chart, use_container_width=True)
+                st.plotly_chart(eps_ttm_chart, width="stretch")
             else:
                 st.info("No EPS TTM data available for this ticker")
 
@@ -280,14 +274,14 @@ def main():
                 df, selected_ticker, "EPS_TTM", "EPS TTM", height=240
             )
 
-            st.plotly_chart(eps_ttm_qoq_chart, use_container_width=True)
+            st.plotly_chart(eps_ttm_qoq_chart, width="stretch")
 
             # Revenue TTM Chart
             revenue_ttm_chart = create_metric_chart(
                 df, selected_ticker, "Revenue_TTM", "Revenue - TTM", height=400
             )
             if revenue_ttm_chart:
-                st.plotly_chart(revenue_ttm_chart, use_container_width=True)
+                st.plotly_chart(revenue_ttm_chart, width="stretch")
             else:
                 st.info("No Revenue TTM data available for this ticker")
 
@@ -295,7 +289,7 @@ def main():
                 df, selected_ticker, "Revenue_TTM", "Revenue TTM", height=240
             )
 
-            st.plotly_chart(revenue_ttm_qoq_chart, use_container_width=True)
+            st.plotly_chart(revenue_ttm_qoq_chart, width="stretch")
 
             # P/E Multiple Chart
             multiple_chart = create_metric_chart(
@@ -306,7 +300,7 @@ def main():
                 height=400,
             )
             if multiple_chart:
-                st.plotly_chart(multiple_chart, use_container_width=True)
+                st.plotly_chart(multiple_chart, width="stretch")
             else:
                 st.info("No Multiple data available for this ticker")
 
@@ -314,7 +308,7 @@ def main():
                 df, selected_ticker, "Multiple", "P/E Multiple", height=240
             )
 
-            st.plotly_chart(multiple_qoq_chart, use_container_width=True)
+            st.plotly_chart(multiple_qoq_chart, width="stretch")
 
             # Dividend Yield Chart
             div_yield_chart = create_metric_chart(
@@ -325,7 +319,7 @@ def main():
                 height=400,
             )
             if div_yield_chart:
-                st.plotly_chart(div_yield_chart, use_container_width=True)
+                st.plotly_chart(div_yield_chart, width="stretch")
             else:
                 st.info("No Dividend Yield data available for this ticker")
 
@@ -333,7 +327,7 @@ def main():
                 df, selected_ticker, "DivYield", "Dividend Yield", height=240
             )
 
-            st.plotly_chart(div_yield_qoq_chart, use_container_width=True)
+            st.plotly_chart(div_yield_qoq_chart, width="stretch")
 
             # Payout Ratio Chart
             payout_ratio_chart = create_metric_chart(
@@ -344,7 +338,7 @@ def main():
                 height=400,
             )
             if payout_ratio_chart:
-                st.plotly_chart(payout_ratio_chart, use_container_width=True)
+                st.plotly_chart(payout_ratio_chart, width="stretch")
             else:
                 st.info("No Payout Ratio data available for this ticker")
 
@@ -352,7 +346,7 @@ def main():
                 df, selected_ticker, "PayoutRatio", "Payout Ratio", height=240
             )
 
-            st.plotly_chart(payout_ratio_qoq_chart, use_container_width=True)
+            st.plotly_chart(payout_ratio_qoq_chart, width="stretch")
 
             # Price Volatility Chart
             price_volatility_chart = create_metric_chart(
@@ -363,7 +357,7 @@ def main():
                 height=400,
             )
             if price_volatility_chart:
-                st.plotly_chart(price_volatility_chart, use_container_width=True)
+                st.plotly_chart(price_volatility_chart, width="stretch")
             else:
                 st.info("No Price Volatility data available for this ticker")
 
@@ -371,7 +365,7 @@ def main():
                 df, selected_ticker, "PriceVolatility", "Price Volatility", height=240
             )
 
-            st.plotly_chart(price_volatility_qoq_chart, use_container_width=True)
+            st.plotly_chart(price_volatility_qoq_chart, width="stretch")
 
         # QoQ Summary Section
         st.subheader("📊 QoQ Change Summary")
@@ -423,7 +417,7 @@ def main():
 
         if qoq_metrics:
             qoq_df = pd.DataFrame(qoq_metrics)
-            st.dataframe(qoq_df, use_container_width=True, hide_index=True)
+            st.dataframe(qoq_df, width="stretch", hide_index=True)
 
         # EPS Prediction Section
         st.subheader("🔮 EPS Prediction")
@@ -501,7 +495,7 @@ def main():
             # Enhanced EPS chart with all scenarios
             eps_pred_chart = create_eps_prediction_chart(df, selected_ticker)
             if eps_pred_chart:
-                st.plotly_chart(eps_pred_chart, use_container_width=True)
+                st.plotly_chart(eps_pred_chart, width="stretch")
 
             # Methodology details in expander
             with st.expander("📊 Prediction Methodology & Statistics"):
@@ -621,7 +615,7 @@ def main():
             # Enhanced EPS TTM chart with all scenarios
             eps_ttm_pred_chart = create_eps_ttm_prediction_chart(df, selected_ticker)
             if eps_ttm_pred_chart:
-                st.plotly_chart(eps_ttm_pred_chart, use_container_width=True)
+                st.plotly_chart(eps_ttm_pred_chart, width="stretch")
 
             with st.expander("📊 EPS TTM Calculation Details"):
                 st.markdown("**TTM Prediction Method:**")
@@ -732,7 +726,7 @@ def main():
             # Enhanced Price chart with all scenarios
             price_pred_chart = create_price_prediction_chart(df, selected_ticker)
             if price_pred_chart:
-                st.plotly_chart(price_pred_chart, use_container_width=True)
+                st.plotly_chart(price_pred_chart, width="stretch")
 
             with st.expander("💰 Price Prediction Methodology"):
                 col_price_method1, col_price_method2 = st.columns(2)
@@ -784,7 +778,7 @@ def main():
         # Raw data table for selected ticker
         st.subheader(f"Raw Data for {selected_ticker}")
         ticker_data = df[df["Ticker"] == selected_ticker]
-        st.dataframe(ticker_data, use_container_width=True)
+        st.dataframe(ticker_data, width="stretch")
 
     with tab2:
         st.header("Multi-Ticker Comparison")
@@ -893,7 +887,7 @@ def main():
                     comparison_chart = create_comparison_chart(
                         df, comparison_tickers, selected_metric, yaxis_range=yaxis_range
                     )
-                    st.plotly_chart(comparison_chart, use_container_width=True)
+                    st.plotly_chart(comparison_chart, width="stretch")
 
                 # Add some spacing between charts
                 if i < num_charts - 1:
@@ -1135,7 +1129,7 @@ def main():
             # Display the comprehensive table
             st.dataframe(
                 comprehensive_df,
-                use_container_width=True,
+                width="stretch",
                 hide_index=True,
                 column_config=column_config,
             )
@@ -1223,7 +1217,7 @@ def main():
 
                     st.dataframe(
                         sector_df,
-                        use_container_width=True,
+                        width="stretch",
                         hide_index=True,
                         column_config=sector_column_config,
                     )
@@ -1263,7 +1257,7 @@ def main():
                 }
                 st.dataframe(
                     eps_rolling_df,
-                    use_container_width=True,
+                    width="stretch",
                     hide_index=True,
                     column_config=eps_column_config,
                 )
@@ -1289,7 +1283,7 @@ def main():
                 revenue_rolling_df = revenue_rolling_df.rename(columns=revenue_rename)
                 st.dataframe(
                     revenue_rolling_df,
-                    use_container_width=True,
+                    width="stretch",
                     hide_index=True,
                     column_config=eps_column_config,
                 )
@@ -1314,7 +1308,7 @@ def main():
                 eps_ttm_rolling_df = eps_ttm_rolling_df.rename(columns=eps_ttm_rename)
                 st.dataframe(
                     eps_ttm_rolling_df,
-                    use_container_width=True,
+                    width="stretch",
                     hide_index=True,
                     column_config=eps_column_config,
                 )
@@ -1341,7 +1335,7 @@ def main():
                 )
                 st.dataframe(
                     revenue_ttm_rolling_df,
-                    use_container_width=True,
+                    width="stretch",
                     hide_index=True,
                     column_config=eps_column_config,
                 )
@@ -1364,7 +1358,7 @@ def main():
                 price_rolling_df = price_rolling_df.rename(columns=price_rename)
                 st.dataframe(
                     price_rolling_df,
-                    use_container_width=True,
+                    width="stretch",
                     hide_index=True,
                     column_config=eps_column_config,
                 )

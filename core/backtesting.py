@@ -462,12 +462,15 @@ def save_ticker_strategy_mapping(
         print(f"Failed to save mapping: {str(e)}")
 
 
-def load_ticker_strategy_mapping(filename="config/ticker_strategy_mapping.json"):
+def load_ticker_strategy_mapping(
+    filename="config/ticker_strategy_mapping.json", verbose=False
+):
     """
     Load the ticker-to-strategy mapping from a JSON file.
 
     Args:
         filename (str): Input filename
+        verbose (bool): Whether to print status messages (default: False)
 
     Returns:
         dict: Mapping of ticker to best strategy, or None if loading fails
@@ -476,20 +479,23 @@ def load_ticker_strategy_mapping(filename="config/ticker_strategy_mapping.json")
         with open(filename, "r") as f:
             mapping = json.load(f)
 
-        print(f"Loaded ticker strategy mapping from: {filename}")
-        print(f"Found mappings for {len(mapping)} tickers")
+        if verbose:
+            print(f"Loaded ticker strategy mapping from: {filename}")
+            print(f"Found mappings for {len(mapping)} tickers")
         return mapping
 
     except FileNotFoundError:
-        print(f"Mapping file not found: {filename}")
+        if verbose:
+            print(f"Mapping file not found: {filename}")
         return None
     except Exception as e:
-        print(f"Failed to load mapping: {str(e)}")
+        if verbose:
+            print(f"Failed to load mapping: {str(e)}")
         return None
 
 
 def get_ticker_strategy(
-    ticker, ticker_strategy_mapping=None, default_strategy="seasonal"
+    ticker, ticker_strategy_mapping=None, default_strategy="seasonal", verbose=False
 ):
     """
     Get the best strategy for a specific ticker.
@@ -498,18 +504,20 @@ def get_ticker_strategy(
         ticker (str): Stock ticker symbol
         ticker_strategy_mapping (dict, optional): Pre-loaded mapping
         default_strategy (str): Fallback strategy if ticker not found
+        verbose (bool): Whether to print status messages (default: False)
 
     Returns:
         str: Best strategy name for the ticker
     """
     if ticker_strategy_mapping is None:
-        ticker_strategy_mapping = load_ticker_strategy_mapping()
+        ticker_strategy_mapping = load_ticker_strategy_mapping(verbose=verbose)
 
     if ticker_strategy_mapping and ticker in ticker_strategy_mapping:
         return ticker_strategy_mapping[ticker]
 
     # Fallback to default strategy
-    print(f"No specific strategy found for {ticker}, using {default_strategy}")
+    if verbose:
+        print(f"No specific strategy found for {ticker}, using {default_strategy}")
     return default_strategy
 
 

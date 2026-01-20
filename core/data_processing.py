@@ -14,6 +14,8 @@ from core.enums import (
     DerivedMetric,
     Metric,
     RankingSuffix,
+    RollingWindow,
+    StrategyWeights,
     Thresholds,
 )
 
@@ -98,7 +100,11 @@ def calculate_qoq_changes(df: pd.DataFrame) -> pd.DataFrame:
         # Calculate TTM (Trailing Twelve Months) values
         for metric in [Metric.EPS.value, Metric.REVENUE.value]:
             if metric in ticker_data.columns:
-                ttm_values = ticker_data[metric].rolling(window=4, min_periods=4).sum()
+                ttm_values = (
+                    ticker_data[metric]
+                    .rolling(window=RollingWindow.TTM, min_periods=RollingWindow.TTM)
+                    .sum()
+                )
                 ttm_col = f"{metric}_TTM"
                 df_with_qoq.loc[ticker_mask, ttm_col] = ttm_values
 
@@ -129,7 +135,9 @@ def calculate_qoq_changes(df: pd.DataFrame) -> pd.DataFrame:
             df_with_qoq.loc[ticker_mask, div_yield_col] = dividend_yield
 
             # Annualized dividend yield
-            dividend_yield_annual = (div_data * 4 / price_data) * 100
+            dividend_yield_annual = (
+                div_data * RollingWindow.QUARTERS_PER_YEAR / price_data
+            ) * 100
             dividend_yield_annual = dividend_yield_annual.replace(
                 [np.inf, -np.inf], np.nan
             )
@@ -143,7 +151,7 @@ def calculate_qoq_changes(df: pd.DataFrame) -> pd.DataFrame:
         ):
             div_data = ticker_data[div_col]
             eps_ttm_data = df_with_qoq.loc[ticker_mask, eps_ttm_col]
-            annual_div = div_data * 4
+            annual_div = div_data * RollingWindow.QUARTERS_PER_YEAR
             payout_ratio = (annual_div / eps_ttm_data) * 100
             payout_ratio = payout_ratio.replace([np.inf, -np.inf], np.nan)
             payout_col = DerivedMetric.PAYOUT_RATIO.value
@@ -169,9 +177,13 @@ def calculate_qoq_changes(df: pd.DataFrame) -> pd.DataFrame:
         eps_qoq_col = DerivedMetric.EPS_QOQ.value
         if eps_qoq_col in ticker_data_with_qoq.columns:
             eps_qoq_values = ticker_data_with_qoq[eps_qoq_col].dropna()
-            if len(eps_qoq_values) >= 8:
-                rolling_4q = eps_qoq_values.rolling(window=4, min_periods=4).mean()
-                rolling_8q = eps_qoq_values.rolling(window=8, min_periods=8).mean()
+            if len(eps_qoq_values) >= RollingWindow.LONG:
+                rolling_4q = eps_qoq_values.rolling(
+                    window=RollingWindow.SHORT, min_periods=RollingWindow.SHORT
+                ).mean()
+                rolling_8q = eps_qoq_values.rolling(
+                    window=RollingWindow.LONG, min_periods=RollingWindow.LONG
+                ).mean()
                 eps_momentum = rolling_4q - rolling_8q
                 momentum_col = DerivedMetric.EPS_MOMENTUM.value
                 df_with_qoq.loc[ticker_mask, momentum_col] = eps_momentum
@@ -180,9 +192,9 @@ def calculate_qoq_changes(df: pd.DataFrame) -> pd.DataFrame:
         price_qoq_col = DerivedMetric.PRICE_QOQ.value
         if price_qoq_col in ticker_data_with_qoq.columns:
             price_qoq_values = ticker_data_with_qoq[price_qoq_col].dropna()
-            if len(price_qoq_values) >= 4:
+            if len(price_qoq_values) >= RollingWindow.SHORT:
                 price_volatility = price_qoq_values.rolling(
-                    window=8, min_periods=4
+                    window=RollingWindow.LONG, min_periods=RollingWindow.SHORT
                 ).std()
                 volatility_col = DerivedMetric.PRICE_VOLATILITY.value
                 df_with_qoq.loc[ticker_mask, volatility_col] = price_volatility
@@ -191,11 +203,13 @@ def calculate_qoq_changes(df: pd.DataFrame) -> pd.DataFrame:
         rev_qoq_col = DerivedMetric.REVENUE_QOQ.value
         if rev_qoq_col in ticker_data_with_qoq.columns:
             revenue_qoq_values = ticker_data_with_qoq[rev_qoq_col].dropna()
-            if len(revenue_qoq_values) >= 4:
+            if len(revenue_qoq_values) >= RollingWindow.SHORT:
                 rolling_mean = revenue_qoq_values.rolling(
-                    window=8, min_periods=4
+                    window=RollingWindow.LONG, min_periods=RollingWindow.SHORT
                 ).mean()
-                rolling_std = revenue_qoq_values.rolling(window=8, min_periods=4).std()
+                rolling_std = revenue_qoq_values.rolling(
+                    window=RollingWindow.LONG, min_periods=RollingWindow.SHORT
+                ).std()
                 revenue_consistency = 100 - ((rolling_std / rolling_mean.abs()) * 100)
                 revenue_consistency = revenue_consistency.replace(
                     [np.inf, -np.inf], np.nan
@@ -216,9 +230,13 @@ def calculate_qoq_changes(df: pd.DataFrame) -> pd.DataFrame:
         ):
             multiple_data = ticker_data_with_qoq[multiple_col]
             eps_qoq_values = ticker_data_with_qoq[eps_qoq_col].dropna()
-            if len(eps_qoq_values) >= 4:
-                eps_growth_4q = eps_qoq_values.rolling(window=4, min_periods=4).mean()
-                eps_growth_annual = ((1 + eps_growth_4q / 100) ** 4 - 1) * 100
+            if len(eps_qoq_values) >= RollingWindow.SHORT:
+                eps_growth_4q = eps_qoq_values.rolling(
+                    window=RollingWindow.SHORT, min_periods=RollingWindow.SHORT
+                ).mean()
+                eps_growth_annual = (
+                    (1 + eps_growth_4q / 100) ** RollingWindow.QUARTERS_PER_YEAR - 1
+                ) * 100
                 peg_ratio = multiple_data / eps_growth_annual.abs()
                 peg_ratio = peg_ratio.replace([np.inf, -np.inf], np.nan)
                 peg_col = DerivedMetric.PEG_RATIO.value
@@ -250,7 +268,7 @@ def _calculate_dividend_growth(
     """Calculate dividend growth rate for a ticker."""
     div_col = Metric.DIVIDEND_AMOUNT.value
     div_amounts = ticker_data[div_col].dropna()
-    if len(div_amounts) < 4:
+    if len(div_amounts) < RollingWindow.SHORT:
         return df_with_qoq
 
     # Find dividend change points
@@ -262,7 +280,7 @@ def _calculate_dividend_growth(
         if current_div is None:
             current_div = div_amt
             last_change_idx = i
-        elif abs(div_amt - current_div) > 0.001:
+        elif abs(div_amt - current_div) > StrategyWeights.DIVIDEND_CHANGE_THRESHOLD:
             periods_since_last_change = i - last_change_idx
             if current_div > 0:
                 growth_rate = ((div_amt - current_div) / current_div) * 100
@@ -284,8 +302,8 @@ def _calculate_dividend_growth(
         last_div = div_changes[-1]["to_amount"]
         total_periods = len(div_amounts)
 
-        if first_div > 0 and total_periods > 4:
-            years = total_periods / 4
+        if first_div > 0 and total_periods > RollingWindow.SHORT:
+            years = total_periods / RollingWindow.QUARTERS_PER_YEAR
             annual_growth = ((last_div / first_div) ** (1 / years) - 1) * 100
             growth_col = DerivedMetric.DIVIDEND_GROWTH_RATE.value
             df_with_qoq.loc[ticker_mask, growth_col] = annual_growth
@@ -296,7 +314,7 @@ def _calculate_dividend_growth(
             freq_col = DerivedMetric.DIVIDEND_INCREASE_FREQ.value
             avg_col = DerivedMetric.AVG_DIVIDEND_INCREASE.value
             df_with_qoq.loc[ticker_mask, freq_col] = len(increases) / (
-                total_periods / 4
+                total_periods / RollingWindow.QUARTERS_PER_YEAR
             )
             df_with_qoq.loc[ticker_mask, avg_col] = avg_increase_rate
     else:

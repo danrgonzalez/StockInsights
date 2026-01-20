@@ -59,17 +59,23 @@ from core.data_processing import (
     load_stock_data,
 )
 
-# Enums (new consistent vocabulary)
+# Enums and constants (consistent vocabulary)
 from core.enums import (
+    BacktestConfig,
+    ChartDefaults,
     Column,
     Confidence,
     DataQuality,
+    DefaultTickers,
     DerivedMetric,
+    FilePaths,
     Metric,
     PredictionKey,
     RankingSuffix,
+    RollingWindow,
     Scenario,
     Strategy,
+    StrategyWeights,
     Thresholds,
     TimeWindow,
 )
@@ -87,7 +93,7 @@ from core.strategies import (
 )
 
 __all__ = [
-    # Enums (consistent vocabulary)
+    # Enums and constants (consistent vocabulary)
     "Strategy",
     "Confidence",
     "Scenario",
@@ -99,6 +105,12 @@ __all__ = [
     "RankingSuffix",
     "Thresholds",
     "PredictionKey",
+    "RollingWindow",
+    "BacktestConfig",
+    "StrategyWeights",
+    "ChartDefaults",
+    "FilePaths",
+    "DefaultTickers",
     # Data loading
     "load_stock_data",
     # Core calculations

@@ -1,6 +1,7 @@
 import plotly.express as px
 import plotly.graph_objects as go
 
+from core.enums import ChartDefaults, DerivedMetric, RollingWindow
 from dashboard.data_utils import predict_next_eps
 
 
@@ -23,36 +24,49 @@ def create_metric_chart(df, ticker, metric, title, height=400):
     )
 
     # Add horizontal lines for P/E Multiple chart
-    if metric == "Multiple":
-        fig.add_hline(y=10, line_dash="solid", line_color="yellow", line_width=2)
-        fig.add_hline(y=20, line_dash="solid", line_color="yellow", line_width=2)
-        fig.add_hline(y=40, line_dash="solid", line_color="yellow", line_width=2)
+    if metric == DerivedMetric.MULTIPLE.value:
+        fig.add_hline(
+            y=ChartDefaults.PE_LOW, line_dash="solid", line_color="yellow", line_width=2
+        )
+        fig.add_hline(
+            y=ChartDefaults.PE_MEDIUM,
+            line_dash="solid",
+            line_color="yellow",
+            line_width=2,
+        )
+        fig.add_hline(
+            y=ChartDefaults.PE_HIGH,
+            line_dash="solid",
+            line_color="yellow",
+            line_width=2,
+        )
 
         # Ensure y-axis range includes all reference lines
         data_max = clean_data[metric].max()
         data_min = clean_data[metric].min()
-        y_max = max(45, data_max + 2)  # At least 45 to show the 40 line with padding
-        y_min = max(
-            0, min(8, data_min - 2)
-        )  # At least down to 8 to show the 10 line with padding, but not below 0
+        y_max = max(ChartDefaults.MULTIPLE_Y_MAX, data_max + 2)
+        y_min = max(0, min(ChartDefaults.MULTIPLE_Y_MIN, data_min - 2))
         fig.update_yaxes(range=[y_min, y_max])
 
-    # Set x-axis range to show last 20 quarters (5 years) by default
+    # Set x-axis range to show last N quarters by default
+    display_quarters = RollingWindow.DISPLAY_QUARTERS
     if len(clean_data) > 1:
         x_max = clean_data["Index"].max() + 0.5
-        if len(clean_data) > 20:
-            # Start from 20 quarters ago
-            x_min = clean_data["Index"].iloc[-20] - 0.5
+        if len(clean_data) > display_quarters:
+            x_min = clean_data["Index"].iloc[-display_quarters] - 0.5
         else:
             x_min = clean_data["Index"].min() - 0.5
         fig.update_xaxes(range=[x_min, x_max])
 
-    # Set y-axis range based on visible data (last 20 quarters)
-    if metric != "Multiple":
-        # Use last 20 quarters for y-axis scaling
-        visible_data = clean_data.tail(20) if len(clean_data) > 20 else clean_data
+    # Set y-axis range based on visible data
+    if metric != DerivedMetric.MULTIPLE.value:
+        visible_data = (
+            clean_data.tail(display_quarters)
+            if len(clean_data) > display_quarters
+            else clean_data
+        )
         data_range = visible_data[metric].max() - visible_data[metric].min()
-        padding = data_range * 0.1 if data_range > 0 else 1
+        padding = data_range * ChartDefaults.Y_AXIS_PADDING if data_range > 0 else 1
         y_min = visible_data[metric].min() - padding
         y_max = visible_data[metric].max() + padding
         fig.update_yaxes(range=[y_min, y_max])
@@ -62,7 +76,7 @@ def create_metric_chart(df, ticker, metric, title, height=400):
         yaxis_title=title,
         hovermode="x unified",
         height=height,
-        margin=dict(l=40, r=20, t=40, b=20),
+        margin=ChartDefaults.standard_margin(),
     )
     return fig
 
@@ -114,9 +128,13 @@ def create_qoq_chart(df, ticker, metric, title, height=240):
     ):
         # Calculate rolling averages from full dataset
         qoq_values = clean_data[qoq_column]
-        rolling_4q = qoq_values.rolling(window=4, min_periods=1).mean()
-        rolling_8q = qoq_values.rolling(window=8, min_periods=1).mean()
-        rolling_12q = qoq_values.rolling(window=12, min_periods=1).mean()
+        rolling_4q = qoq_values.rolling(
+            window=RollingWindow.SHORT, min_periods=1
+        ).mean()
+        rolling_8q = qoq_values.rolling(window=RollingWindow.LONG, min_periods=1).mean()
+        rolling_12q = qoq_values.rolling(
+            window=RollingWindow.EXTENDED, min_periods=1
+        ).mean()
 
         fig.add_trace(
             go.Scatter(
@@ -150,20 +168,24 @@ def create_qoq_chart(df, ticker, metric, title, height=240):
                 visible="legendonly",
             )
         )
-    # Set x-axis range to show last 20 quarters (5 years) by default
+    # Set x-axis range to show last N quarters by default
+    display_quarters = RollingWindow.DISPLAY_QUARTERS
     if len(clean_data) > 1:
         x_max = clean_data["Index"].max() + 0.5
-        if len(clean_data) > 20:
-            # Start from 20 quarters ago
-            x_min = clean_data["Index"].iloc[-20] - 0.5
+        if len(clean_data) > display_quarters:
+            x_min = clean_data["Index"].iloc[-display_quarters] - 0.5
         else:
             x_min = clean_data["Index"].min() - 0.5
         fig.update_xaxes(range=[x_min, x_max])
 
-    # Set y-axis range based on visible data (last 20 quarters) with padding
-    visible_data = clean_data.tail(20) if len(clean_data) > 20 else clean_data
+    # Set y-axis range based on visible data with padding
+    visible_data = (
+        clean_data.tail(display_quarters)
+        if len(clean_data) > display_quarters
+        else clean_data
+    )
     data_range = visible_data[qoq_column].max() - visible_data[qoq_column].min()
-    padding = data_range * 0.1 if data_range > 0 else 5
+    padding = data_range * ChartDefaults.Y_AXIS_PADDING if data_range > 0 else 5
     y_min = visible_data[qoq_column].min() - padding
     y_max = visible_data[qoq_column].max() + padding
     fig.update_yaxes(range=[y_min, y_max])
@@ -174,7 +196,7 @@ def create_qoq_chart(df, ticker, metric, title, height=240):
         hovermode="x unified",
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
         height=height,
-        margin=dict(l=40, r=20, t=30, b=20),
+        margin=ChartDefaults.compact_margin(),
     )
     fig.update_xaxes(showticklabels=False)
     fig.update_traces(
@@ -203,7 +225,7 @@ def create_blank_placeholder(title="No Data Available", height=400):
         xaxis_title="",
         yaxis_title="Value",
         height=height,
-        margin=dict(l=40, r=20, t=40, b=20),
+        margin=ChartDefaults.standard_margin(),
         showlegend=False,
         plot_bgcolor="rgba(0,0,0,0)",
         paper_bgcolor="rgba(0,0,0,0)",
@@ -250,8 +272,8 @@ def create_combined_peg_pegy_chart(df, ticker, height=400):
         peg_data = ticker_data.dropna(subset=["PEGRatio"])
         if len(peg_data) > 0:
             # Show last 20 quarters by default
-            if len(peg_data) > 20:
-                display_peg = peg_data.tail(20)
+            if len(peg_data) > RollingWindow.DISPLAY_QUARTERS:
+                display_peg = peg_data.tail(RollingWindow.DISPLAY_QUARTERS)
             else:
                 display_peg = peg_data
 
@@ -275,8 +297,8 @@ def create_combined_peg_pegy_chart(df, ticker, height=400):
         pegy_data = ticker_data.dropna(subset=["PEGYRatio"])
         if len(pegy_data) > 0:
             # Show last 20 quarters by default
-            if len(pegy_data) > 20:
-                display_pegy = pegy_data.tail(20)
+            if len(pegy_data) > RollingWindow.DISPLAY_QUARTERS:
+                display_pegy = pegy_data.tail(RollingWindow.DISPLAY_QUARTERS)
             else:
                 display_pegy = pegy_data
 
@@ -295,28 +317,32 @@ def create_combined_peg_pegy_chart(df, ticker, height=400):
                 )
             )
 
-    # Add reference line at 1.0 (good value threshold)
+    # Add reference line at good value threshold
     fig.add_hline(
-        y=1.0,
+        y=ChartDefaults.PEG_GOOD_VALUE,
         line_dash="dash",
         line_color="green",
         opacity=0.7,
-        annotation_text="Good Value Threshold (1.0)",
+        annotation_text=f"Good Value Threshold ({ChartDefaults.PEG_GOOD_VALUE})",
     )
 
     # Set axis ranges based on visible data
     all_data = []
     if peg_available:
         peg_visible = (
-            ticker_data.dropna(subset=["PEGRatio"]).tail(20)
-            if len(ticker_data.dropna(subset=["PEGRatio"])) > 20
+            ticker_data.dropna(subset=["PEGRatio"]).tail(RollingWindow.DISPLAY_QUARTERS)
+            if len(ticker_data.dropna(subset=["PEGRatio"]))
+            > RollingWindow.DISPLAY_QUARTERS
             else ticker_data.dropna(subset=["PEGRatio"])
         )
         all_data.extend(peg_visible["PEGRatio"].tolist())
     if pegy_available:
         pegy_visible = (
-            ticker_data.dropna(subset=["PEGYRatio"]).tail(20)
-            if len(ticker_data.dropna(subset=["PEGYRatio"])) > 20
+            ticker_data.dropna(subset=["PEGYRatio"]).tail(
+                RollingWindow.DISPLAY_QUARTERS
+            )
+            if len(ticker_data.dropna(subset=["PEGYRatio"]))
+            > RollingWindow.DISPLAY_QUARTERS
             else ticker_data.dropna(subset=["PEGYRatio"])
         )
         all_data.extend(pegy_visible["PEGYRatio"].tolist())
@@ -326,15 +352,21 @@ def create_combined_peg_pegy_chart(df, ticker, height=400):
         all_indices = []
         if peg_available:
             peg_visible = (
-                ticker_data.dropna(subset=["PEGRatio"]).tail(20)
-                if len(ticker_data.dropna(subset=["PEGRatio"])) > 20
+                ticker_data.dropna(subset=["PEGRatio"]).tail(
+                    RollingWindow.DISPLAY_QUARTERS
+                )
+                if len(ticker_data.dropna(subset=["PEGRatio"]))
+                > RollingWindow.DISPLAY_QUARTERS
                 else ticker_data.dropna(subset=["PEGRatio"])
             )
             all_indices.extend(peg_visible["Index"].tolist())
         if pegy_available:
             pegy_visible = (
-                ticker_data.dropna(subset=["PEGYRatio"]).tail(20)
-                if len(ticker_data.dropna(subset=["PEGYRatio"])) > 20
+                ticker_data.dropna(subset=["PEGYRatio"]).tail(
+                    RollingWindow.DISPLAY_QUARTERS
+                )
+                if len(ticker_data.dropna(subset=["PEGYRatio"]))
+                > RollingWindow.DISPLAY_QUARTERS
                 else ticker_data.dropna(subset=["PEGYRatio"])
             )
             all_indices.extend(pegy_visible["Index"].tolist())
@@ -346,7 +378,7 @@ def create_combined_peg_pegy_chart(df, ticker, height=400):
 
         # Set y-axis range
         data_range = max(all_data) - min(all_data)
-        padding = data_range * 0.1 if data_range > 0 else 0.5
+        padding = data_range * ChartDefaults.Y_AXIS_PADDING if data_range > 0 else 0.5
         y_min = max(0, min(all_data) - padding)  # Don't go below 0
         y_max = max(all_data) + padding
         # Ensure we show at least up to 1.5 to include the reference line area
@@ -359,7 +391,7 @@ def create_combined_peg_pegy_chart(df, ticker, height=400):
         yaxis_title="Ratio Value",
         hovermode="x unified",
         height=height,
-        margin=dict(l=40, r=20, t=40, b=20),
+        margin=ChartDefaults.standard_margin(),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
     )
 
@@ -386,12 +418,12 @@ def create_comparison_chart(df, tickers, metric, yaxis_range=None):
     if is_qoq:
         fig.add_hline(y=0, line_dash="dash", line_color="yellow", opacity=0.8)
 
-    # Set x-axis range to show last 20 quarters (5 years) by default
+    # Set x-axis range to show last N quarters by default
+    display_quarters = RollingWindow.DISPLAY_QUARTERS
     if len(data) > 0:
-        # Get the maximum index across all tickers
         max_index = data["Index"].max()
-        if max_index >= 20:
-            x_min = max_index - 19.5  # Show last 20 quarters
+        if max_index >= display_quarters:
+            x_min = max_index - (display_quarters - 0.5)
             x_max = max_index + 0.5
             fig.update_xaxes(range=[x_min, x_max])
 
@@ -399,7 +431,9 @@ def create_comparison_chart(df, tickers, metric, yaxis_range=None):
     if yaxis_range is not None:
         fig.update_yaxes(range=yaxis_range)
     fig.update_layout(
-        legend_title_text="Ticker", xaxis_title="", margin=dict(l=40, r=20, t=40, b=20)
+        legend_title_text="Ticker",
+        xaxis_title="",
+        margin=ChartDefaults.standard_margin(),
     )
     return fig
 
@@ -569,8 +603,8 @@ def create_eps_prediction_chart(df, ticker):
     clean_data = ticker_data.dropna(subset=["EPS"])
     if len(clean_data) > 0:
         x_max = max(clean_data["Index"].max(), next_index) + 0.5
-        if len(clean_data) > 20:
-            x_min = clean_data["Index"].iloc[-20] - 0.5
+        if len(clean_data) > RollingWindow.DISPLAY_QUARTERS:
+            x_min = clean_data["Index"].iloc[-RollingWindow.DISPLAY_QUARTERS] - 0.5
         else:
             x_min = clean_data["Index"].min() - 0.5
         fig.update_xaxes(range=[x_min, x_max])
@@ -578,7 +612,11 @@ def create_eps_prediction_chart(df, ticker):
         # Extend y-axis to include all prediction values
         all_y_values = []
         # Add historical data (visible range)
-        visible_data = clean_data.tail(20) if len(clean_data) > 20 else clean_data
+        visible_data = (
+            clean_data.tail(RollingWindow.DISPLAY_QUARTERS)
+            if len(clean_data) > RollingWindow.DISPLAY_QUARTERS
+            else clean_data
+        )
         all_y_values.extend(visible_data["EPS"].dropna().tolist())
         # Add prediction values
         all_y_values.extend(
@@ -591,7 +629,7 @@ def create_eps_prediction_chart(df, ticker):
 
         if all_y_values:
             data_range = max(all_y_values) - min(all_y_values)
-            padding = data_range * 0.1 if data_range > 0 else 1
+            padding = data_range * ChartDefaults.Y_AXIS_PADDING if data_range > 0 else 1
             y_min = min(all_y_values) - padding
             y_max = max(all_y_values) + padding
             fig.update_yaxes(range=[y_min, y_max])
@@ -769,8 +807,8 @@ def create_eps_ttm_prediction_chart(df, ticker):
     clean_data = ticker_data.dropna(subset=["EPS_TTM"])
     if len(clean_data) > 0:
         x_max = max(clean_data["Index"].max(), next_index) + 0.5
-        if len(clean_data) > 20:
-            x_min = clean_data["Index"].iloc[-20] - 0.5
+        if len(clean_data) > RollingWindow.DISPLAY_QUARTERS:
+            x_min = clean_data["Index"].iloc[-RollingWindow.DISPLAY_QUARTERS] - 0.5
         else:
             x_min = clean_data["Index"].min() - 0.5
         fig.update_xaxes(range=[x_min, x_max])
@@ -778,7 +816,11 @@ def create_eps_ttm_prediction_chart(df, ticker):
         # Extend y-axis to include all TTM prediction values
         all_y_values = []
         # Add historical data (visible range)
-        visible_data = clean_data.tail(20) if len(clean_data) > 20 else clean_data
+        visible_data = (
+            clean_data.tail(RollingWindow.DISPLAY_QUARTERS)
+            if len(clean_data) > RollingWindow.DISPLAY_QUARTERS
+            else clean_data
+        )
         all_y_values.extend(visible_data["EPS_TTM"].dropna().tolist())
         # Add TTM prediction values
         all_y_values.extend(
@@ -791,7 +833,7 @@ def create_eps_ttm_prediction_chart(df, ticker):
 
         if all_y_values:
             data_range = max(all_y_values) - min(all_y_values)
-            padding = data_range * 0.1 if data_range > 0 else 1
+            padding = data_range * ChartDefaults.Y_AXIS_PADDING if data_range > 0 else 1
             y_min = min(all_y_values) - padding
             y_max = max(all_y_values) + padding
             fig.update_yaxes(range=[y_min, y_max])
@@ -973,8 +1015,8 @@ def create_price_prediction_chart(df, ticker):
     clean_data = ticker_data.dropna(subset=["Price"])
     if len(clean_data) > 0:
         x_max = max(clean_data["Index"].max(), next_index) + 0.5
-        if len(clean_data) > 20:
-            x_min = clean_data["Index"].iloc[-20] - 0.5
+        if len(clean_data) > RollingWindow.DISPLAY_QUARTERS:
+            x_min = clean_data["Index"].iloc[-RollingWindow.DISPLAY_QUARTERS] - 0.5
         else:
             x_min = clean_data["Index"].min() - 0.5
         fig.update_xaxes(range=[x_min, x_max])
@@ -982,7 +1024,11 @@ def create_price_prediction_chart(df, ticker):
         # Extend y-axis to include all price prediction values
         all_y_values = []
         # Add historical data (visible range)
-        visible_data = clean_data.tail(20) if len(clean_data) > 20 else clean_data
+        visible_data = (
+            clean_data.tail(RollingWindow.DISPLAY_QUARTERS)
+            if len(clean_data) > RollingWindow.DISPLAY_QUARTERS
+            else clean_data
+        )
         all_y_values.extend(visible_data["Price"].dropna().tolist())
         # Add price prediction values
         all_y_values.extend(
@@ -995,7 +1041,7 @@ def create_price_prediction_chart(df, ticker):
 
         if all_y_values:
             data_range = max(all_y_values) - min(all_y_values)
-            padding = data_range * 0.1 if data_range > 0 else 1
+            padding = data_range * ChartDefaults.Y_AXIS_PADDING if data_range > 0 else 1
             y_min = min(all_y_values) - padding
             y_max = max(all_y_values) + padding
             fig.update_yaxes(range=[y_min, y_max])

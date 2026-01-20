@@ -12,7 +12,9 @@ from core.enums import (
     DerivedMetric,
     Metric,
     PredictionKey,
+    RollingWindow,
     Strategy,
+    StrategyWeights,
     Thresholds,
 )
 
@@ -51,8 +53,12 @@ def weighted_growth_strategy(ticker_data):
     latest_eps = eps_data.iloc[-1]
 
     # Calculate recent growth rates
-    recent_qoq_4q = qoq_data.tail(4)
-    recent_qoq_8q = qoq_data.tail(8) if len(qoq_data) >= 8 else recent_qoq_4q
+    recent_qoq_4q = qoq_data.tail(RollingWindow.SHORT)
+    recent_qoq_8q = (
+        qoq_data.tail(RollingWindow.LONG)
+        if len(qoq_data) >= RollingWindow.LONG
+        else recent_qoq_4q
+    )
 
     # Remove extreme outliers (beyond ±200% growth)
     outlier_min = Thresholds.GROWTH_OUTLIER_MIN
@@ -70,15 +76,20 @@ def weighted_growth_strategy(ticker_data):
     # Calculate average growth rates
     avg_growth_4q = recent_qoq_4q_clean.mean()
     avg_growth_8q = (
-        recent_qoq_8q_clean.mean() if len(recent_qoq_8q_clean) >= 4 else avg_growth_4q
+        recent_qoq_8q_clean.mean()
+        if len(recent_qoq_8q_clean) >= RollingWindow.SHORT
+        else avg_growth_4q
     )
 
     # Weighted average: favor recent performance but consider longer term
-    if len(qoq_data) >= 8:
-        predicted_growth = (0.7 * avg_growth_4q) + (0.3 * avg_growth_8q)
+    if len(qoq_data) >= RollingWindow.LONG:
+        predicted_growth = (
+            StrategyWeights.RECENT_WEIGHT * avg_growth_4q
+            + StrategyWeights.HISTORICAL_WEIGHT * avg_growth_8q
+        )
         confidence = (
             Confidence.HIGH.value
-            if len(recent_qoq_4q_clean) == 4
+            if len(recent_qoq_4q_clean) == RollingWindow.SHORT
             else Confidence.MEDIUM.value
         )
     else:
@@ -92,12 +103,17 @@ def weighted_growth_strategy(ticker_data):
     # Calculate historical volatility for scenario analysis
     growth_std_4q = recent_qoq_4q_clean.std()
     growth_std_8q = (
-        recent_qoq_8q_clean.std() if len(recent_qoq_8q_clean) >= 4 else growth_std_4q
+        recent_qoq_8q_clean.std()
+        if len(recent_qoq_8q_clean) >= RollingWindow.SHORT
+        else growth_std_4q
     )
 
     # Use weighted standard deviation (similar to growth rate weighting)
-    if len(qoq_data) >= 8:
-        predicted_volatility = (0.7 * growth_std_4q) + (0.3 * growth_std_8q)
+    if len(qoq_data) >= RollingWindow.LONG:
+        predicted_volatility = (
+            StrategyWeights.RECENT_WEIGHT * growth_std_4q
+            + StrategyWeights.HISTORICAL_WEIGHT * growth_std_8q
+        )
     else:
         predicted_volatility = growth_std_4q
 
@@ -143,9 +159,13 @@ def weighted_growth_strategy(ticker_data):
         PredictionKey.CONFIDENCE: confidence,
         PredictionKey.DATA_POINTS: len(qoq_data),
         PredictionKey.GROWTH_4Q: avg_growth_4q,
-        PredictionKey.GROWTH_8Q: avg_growth_8q if len(qoq_data) >= 8 else None,
+        PredictionKey.GROWTH_8Q: (
+            avg_growth_8q if len(qoq_data) >= RollingWindow.LONG else None
+        ),
         PredictionKey.STD_4Q: growth_std_4q,
-        PredictionKey.STD_8Q: growth_std_8q if len(qoq_data) >= 8 else None,
+        PredictionKey.STD_8Q: (
+            growth_std_8q if len(qoq_data) >= RollingWindow.LONG else None
+        ),
         PredictionKey.METHODOLOGY: "Weighted average with ±1σ volatility bands",
     }
 
@@ -180,7 +200,7 @@ def simple_average_strategy(ticker_data):
     latest_eps = eps_data.iloc[-1]
 
     # Use last 4 quarters for prediction
-    recent_qoq = qoq_data.tail(4)
+    recent_qoq = qoq_data.tail(RollingWindow.SHORT)
     outlier_min = Thresholds.GROWTH_OUTLIER_MIN
     outlier_max = Thresholds.GROWTH_OUTLIER_MAX
     recent_qoq_clean = recent_qoq[
@@ -251,7 +271,11 @@ def momentum_strategy(ticker_data):
     latest_eps = eps_data.iloc[-1]
 
     # Use last 6 quarters if available, otherwise last 4
-    recent_qoq = qoq_data.tail(6) if len(qoq_data) >= 6 else qoq_data.tail(4)
+    recent_qoq = (
+        qoq_data.tail(RollingWindow.MOMENTUM_WINDOW)
+        if len(qoq_data) >= RollingWindow.MOMENTUM_WINDOW
+        else qoq_data.tail(RollingWindow.SHORT)
+    )
     outlier_min = Thresholds.GROWTH_OUTLIER_MIN
     outlier_max = Thresholds.GROWTH_OUTLIER_MAX
     recent_qoq_clean = recent_qoq[
@@ -262,7 +286,7 @@ def momentum_strategy(ticker_data):
         return None
 
     # Apply exponential weights (most recent gets highest weight)
-    weights = np.exp(np.arange(len(recent_qoq_clean)) * 0.3)
+    weights = np.exp(np.arange(len(recent_qoq_clean)) * StrategyWeights.MOMENTUM_DECAY)
     weights = weights / weights.sum()  # Normalize to sum to 1
 
     predicted_growth = np.average(recent_qoq_clean, weights=weights)
@@ -323,7 +347,7 @@ def trend_analysis_strategy(ticker_data):
     latest_eps = eps_data.iloc[-1]
 
     # Use last 8 quarters if available, otherwise last 6 or 4
-    n_quarters = min(8, len(qoq_data))
+    n_quarters = min(RollingWindow.TREND_MAX_WINDOW, len(qoq_data))
     recent_qoq = qoq_data.tail(n_quarters)
     outlier_min = Thresholds.GROWTH_OUTLIER_MIN
     outlier_max = Thresholds.GROWTH_OUTLIER_MAX
@@ -413,7 +437,7 @@ def seasonal_strategy(ticker_data):
     outlier_min = Thresholds.GROWTH_OUTLIER_MIN
     outlier_max = Thresholds.GROWTH_OUTLIER_MAX
 
-    for year_back in [4, 8, 12]:
+    for year_back in RollingWindow.SEASONAL_LOOKBACKS:
         if len(eps_data) > year_back:
             previous_year_eps = eps_data.iloc[-(year_back + 1)]
             if previous_year_eps != 0:

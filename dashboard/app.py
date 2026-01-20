@@ -11,6 +11,13 @@ import pandas as pd  # noqa: E402
 import streamlit as st  # noqa: E402
 
 from core.classifications import get_stock_classification  # noqa: E402
+from core.enums import (  # noqa: E402
+    Confidence,
+    DefaultTickers,
+    FilePaths,
+    Metric,
+    RollingWindow,
+)
 
 CLASSIFICATIONS_AVAILABLE = True
 
@@ -73,13 +80,13 @@ def main():
     )
 
     # Default file path
-    default_file = "data/StockData_Indexed.xlsx"
+    default_file = FilePaths.DATA_FILE
 
     # Load data
     if uploaded_file is not None:
         df = pd.read_excel(uploaded_file)
         # Clean numeric columns - convert non-numeric values to NaN
-        numeric_columns = ["EPS", "Revenue", "Price", "DivAmt", "Index"]
+        numeric_columns = Metric.numeric_columns()
         for col in numeric_columns:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors="coerce")
@@ -114,8 +121,12 @@ def main():
     st.sidebar.header("🎯 Select Ticker")
     available_tickers = sorted(df["Ticker"].unique())
 
-    # Set default to AAPL if it exists, otherwise use first ticker
-    default_ticker = "AAPL" if "AAPL" in available_tickers else available_tickers[0]
+    # Set default to primary ticker if it exists, otherwise use first ticker
+    default_ticker = (
+        DefaultTickers.PRIMARY
+        if DefaultTickers.PRIMARY in available_tickers
+        else available_tickers[0]
+    )
     selected_ticker = st.sidebar.selectbox(
         "Choose a ticker:",
         available_tickers,
@@ -458,7 +469,7 @@ def main():
                 )
 
             with col5:
-                confidence_color = {"High": "🟢", "Medium": "🟡", "Low": "🔴"}
+                confidence_color = {c.value: c.emoji for c in Confidence}
                 conf = prediction["confidence"]
                 conf_icon = confidence_color.get(conf, "⚪")
                 st.markdown(
@@ -604,7 +615,7 @@ def main():
                 )
 
             with col7:
-                confidence_color = {"High": "🟢", "Medium": "🟡", "Low": "🔴"}
+                confidence_color = {c.value: c.emoji for c in Confidence}
                 conf = prediction["confidence"]
                 conf_icon = confidence_color.get(conf, "⚪")
                 st.markdown(
@@ -628,9 +639,14 @@ def main():
                 )
                 st.markdown("• Scenarios based on quarterly prediction volatility")
 
-                if len(df[df["Ticker"] == selected_ticker]["EPS"].dropna()) >= 4:
+                if (
+                    len(df[df["Ticker"] == selected_ticker]["EPS"].dropna())
+                    >= RollingWindow.TTM
+                ):
                     recent_quarters = (
-                        df[df["Ticker"] == selected_ticker]["EPS"].dropna().tail(4)
+                        df[df["Ticker"] == selected_ticker]["EPS"]
+                        .dropna()
+                        .tail(RollingWindow.TTM)
                     )
                     st.markdown("**Current TTM Components:**")
                     st.markdown(
@@ -715,7 +731,7 @@ def main():
                 )
 
             with col8:
-                confidence_color = {"High": "🟢", "Medium": "🟡", "Low": "🔴"}
+                confidence_color = {c.value: c.emoji for c in Confidence}
                 conf = prediction["confidence"]
                 conf_icon = confidence_color.get(conf, "⚪")
                 st.markdown(
@@ -784,11 +800,10 @@ def main():
         st.header("Multi-Ticker Comparison")
 
         # Multi-select for tickers
-        default_comparison_tickers = ["AAPL", "GOOGL", "AMZN", "META", "NVDA", "BRK.B"]
         # Only include tickers that actually exist in the data
         default_tickers = [
             ticker
-            for ticker in default_comparison_tickers
+            for ticker in DefaultTickers.COMPARISON_SET
             if ticker in available_tickers
         ]
         # If none of the defaults exist, fall back to first 4 tickers
@@ -949,10 +964,14 @@ def main():
                     qoq_values = ticker_data[qoq_col].dropna()
                     if len(qoq_values) > 0:
                         # Calculate rolling means
-                        rolling_4q = qoq_values.rolling(window=4, min_periods=1).mean()
-                        rolling_8q = qoq_values.rolling(window=8, min_periods=1).mean()
+                        rolling_4q = qoq_values.rolling(
+                            window=RollingWindow.SHORT, min_periods=1
+                        ).mean()
+                        rolling_8q = qoq_values.rolling(
+                            window=RollingWindow.LONG, min_periods=1
+                        ).mean()
                         rolling_12q = qoq_values.rolling(
-                            window=12, min_periods=1
+                            window=RollingWindow.EXTENDED, min_periods=1
                         ).mean()
 
                         # Get the latest values

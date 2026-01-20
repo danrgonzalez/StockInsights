@@ -274,6 +274,135 @@ class Thresholds:
     MIN_DOWNSIDE_PERIODS = 3
 
 
+class RollingWindow:
+    """Rolling window sizes in quarters for various calculations."""
+
+    # Core rolling windows (in quarters)
+    QUARTERS_PER_YEAR = 4
+    TTM = 4  # Trailing twelve months (4 quarters)
+    SHORT = 4  # Short-term window (1 year)
+    MEDIUM = 6  # Medium-term window (1.5 years)
+    LONG = 8  # Long-term window (2 years)
+    EXTENDED = 12  # Extended window (3 years)
+
+    # Display periods
+    DISPLAY_QUARTERS = 20  # Default display: 5 years of data
+
+    # Seasonal lookback periods (years ago in quarters)
+    SEASONAL_LOOKBACKS = [4, 8, 12]  # 1, 2, 3 years back
+
+    # Strategy-specific windows
+    MOMENTUM_WINDOW = 6  # Momentum strategy prefers 6 quarters
+    TREND_MAX_WINDOW = 8  # Trend analysis max lookback
+
+
+class BacktestConfig:
+    """Constants for backtesting and accuracy evaluation."""
+
+    # Default backtest parameters
+    DEFAULT_PERIODS = 8  # Default number of quarters to backtest
+    MIN_DATA_POINTS = 12  # Minimum data points for reliable backtest
+
+    # Accuracy thresholds (percentage)
+    ACCURACY_THRESHOLD_TIGHT = 10  # Within 10% = good prediction
+    ACCURACY_THRESHOLD_LOOSE = 20  # Within 20% = acceptable prediction
+
+    # Accuracy score weights
+    WEIGHT_MEAN_ERROR = 0.6
+    WEIGHT_GROWTH_ERROR = 0.4
+
+    # Data sufficiency checks
+    DATA_BUFFER_LONG = 8  # Extra quarters needed for full strategies
+    DATA_BUFFER_SHORT = 4  # Extra quarters for simpler strategies
+
+
+class StrategyWeights:
+    """Weights and factors used in prediction strategies."""
+
+    # Weighted growth strategy
+    RECENT_WEIGHT = 0.7  # Weight for recent 4Q average
+    HISTORICAL_WEIGHT = 0.3  # Weight for 8Q average
+
+    # Momentum strategy exponential weighting
+    MOMENTUM_DECAY = 0.3  # Exponential decay factor
+
+    # Dividend detection
+    DIVIDEND_CHANGE_THRESHOLD = 0.001  # Min change to detect dividend adjustment
+
+
+class ChartDefaults:
+    """Default values for chart rendering."""
+
+    # Chart margins (left, right, top, bottom)
+    MARGIN_LEFT = 40
+    MARGIN_RIGHT = 20
+    MARGIN_TOP = 40
+    MARGIN_TOP_SMALL = 30
+    MARGIN_BOTTOM = 20
+
+    @classmethod
+    def standard_margin(cls) -> dict:
+        """Return standard chart margins."""
+        return dict(
+            l=cls.MARGIN_LEFT, r=cls.MARGIN_RIGHT, t=cls.MARGIN_TOP, b=cls.MARGIN_BOTTOM
+        )
+
+    @classmethod
+    def compact_margin(cls) -> dict:
+        """Return compact chart margins for smaller charts."""
+        return dict(
+            l=cls.MARGIN_LEFT,
+            r=cls.MARGIN_RIGHT,
+            t=cls.MARGIN_TOP_SMALL,
+            b=cls.MARGIN_BOTTOM,
+        )
+
+    # P/E Multiple reference lines
+    PE_LOW = 10
+    PE_MEDIUM = 20
+    PE_HIGH = 40
+
+    # Y-axis bounds for Multiple chart
+    MULTIPLE_Y_MAX = 45
+    MULTIPLE_Y_MIN = 8
+
+    # PEG/PEGY threshold line
+    PEG_GOOD_VALUE = 1.0
+
+    # Data range padding (percentage)
+    Y_AXIS_PADDING = 0.1  # 10% padding on y-axis
+
+
+class FilePaths:
+    """Standard file paths used throughout the application."""
+
+    # Data files
+    DATA_DIR = "data"
+    DATA_FILE = "data/StockData_Indexed.xlsx"
+    RAW_DATA_FILE = "data/StockData.xlsx"
+
+    # Config files
+    CONFIG_DIR = "config"
+    STRATEGY_MAPPING_FILE = "config/ticker_strategy_mapping.json"
+
+    # Export format
+    EXPORT_DATETIME_FORMAT = "%Y%m%d_%H%M%S"
+
+
+class DefaultTickers:
+    """Default ticker symbols for various contexts."""
+
+    # Primary default
+    PRIMARY = "AAPL"
+
+    # Comparison chart defaults
+    COMPARISON_SET = ["AAPL", "GOOGL", "AMZN", "META", "NVDA", "BRK.B"]
+
+    # Chart count options
+    CHART_COUNT_OPTIONS = [1, 2, 3, 4]
+    DEFAULT_CHART_COUNT_INDEX = 3  # Default to 4 charts
+
+
 # Prediction result keys as constants
 class PredictionKey:
     """Standard keys for prediction result dictionaries."""

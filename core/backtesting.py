@@ -13,11 +13,20 @@ import json
 import numpy as np
 import pandas as pd
 
-from core.enums import Column, Metric, PredictionKey, Strategy
+from core.enums import (
+    BacktestConfig,
+    Column,
+    FilePaths,
+    Metric,
+    PredictionKey,
+    Strategy,
+)
 from core.strategies import get_all_strategies
 
 
-def backtest_strategy(df, ticker, strategy_func, n_periods=8):
+def backtest_strategy(
+    df, ticker, strategy_func, n_periods=BacktestConfig.DEFAULT_PERIODS
+):
     """
     Backtest a single strategy on historical data.
 
@@ -37,11 +46,13 @@ def backtest_strategy(df, ticker, strategy_func, n_periods=8):
     ticker_data = df[df[ticker_col] == ticker].copy()
     ticker_data = ticker_data.sort_values(index_col)
 
-    if len(ticker_data) < n_periods + 8:  # Need enough data for backtesting
+    # Need enough data for backtesting
+    if len(ticker_data) < n_periods + BacktestConfig.DATA_BUFFER_LONG:
         return None
 
     eps_data = ticker_data[eps_col].dropna()
-    if len(eps_data) < n_periods + 4:  # Need enough EPS data
+    # Need enough EPS data
+    if len(eps_data) < n_periods + BacktestConfig.DATA_BUFFER_SHORT:
         return None
 
     results = []
@@ -115,8 +126,12 @@ def backtest_strategy(df, ticker, strategy_func, n_periods=8):
         "mean_pct_error": results_df["pct_error"].mean(),
         "median_pct_error": results_df["pct_error"].median(),
         "mean_growth_error": results_df["growth_error"].mean(),
-        "predictions_within_10pct": (results_df["pct_error"] <= 10).sum(),
-        "predictions_within_20pct": (results_df["pct_error"] <= 20).sum(),
+        "predictions_within_10pct": (
+            results_df["pct_error"] <= BacktestConfig.ACCURACY_THRESHOLD_TIGHT
+        ).sum(),
+        "predictions_within_20pct": (
+            results_df["pct_error"] <= BacktestConfig.ACCURACY_THRESHOLD_LOOSE
+        ).sum(),
         "rmse": np.sqrt(
             ((results_df[pred_eps_key] - results_df["actual_eps"]) ** 2).mean()
         ),
@@ -127,14 +142,17 @@ def backtest_strategy(df, ticker, strategy_func, n_periods=8):
     # Calculate accuracy score (lower is better)
     # Weighted combination of percentage error and growth prediction error
     accuracy_score = (
-        0.6 * summary["mean_pct_error"] + 0.4 * summary["mean_growth_error"]
+        BacktestConfig.WEIGHT_MEAN_ERROR * summary["mean_pct_error"]
+        + BacktestConfig.WEIGHT_GROWTH_ERROR * summary["mean_growth_error"]
     )
     summary["accuracy_score"] = accuracy_score
 
     return summary
 
 
-def run_backtest_comparison(df, ticker="AAPL", n_periods=8):
+def run_backtest_comparison(
+    df, ticker="AAPL", n_periods=BacktestConfig.DEFAULT_PERIODS
+):
     """
     Run backtesting comparison across all strategies.
 
@@ -295,7 +313,11 @@ def print_detailed_comparison(results):
 # Multi-ticker backtesting functions
 
 
-def run_multi_ticker_backtest(df, n_periods=8, min_data_points=12):
+def run_multi_ticker_backtest(
+    df,
+    n_periods=BacktestConfig.DEFAULT_PERIODS,
+    min_data_points=BacktestConfig.MIN_DATA_POINTS,
+):
     """
     Run backtesting on all tickers to find the best strategy for each.
 
@@ -444,7 +466,7 @@ def analyze_ticker_strategies(ticker_best_strategies):
 
 
 def save_ticker_strategy_mapping(
-    ticker_best_strategies, filename="config/ticker_strategy_mapping.json"
+    ticker_best_strategies, filename=FilePaths.STRATEGY_MAPPING_FILE
 ):
     """
     Save the ticker-to-strategy mapping to a JSON file.
@@ -469,7 +491,7 @@ def save_ticker_strategy_mapping(
 
 
 def load_ticker_strategy_mapping(
-    filename="config/ticker_strategy_mapping.json", verbose=False
+    filename=FilePaths.STRATEGY_MAPPING_FILE, verbose=False
 ):
     """
     Load the ticker-to-strategy mapping from a JSON file.
@@ -585,7 +607,7 @@ if __name__ == "__main__":
     print("Starting Multi-Ticker Strategy Optimization...")
 
     # Load data
-    df = load_data("data/StockData_Indexed.xlsx")
+    df = load_data(FilePaths.DATA_FILE)
     if df is None:
         print("Failed to load data")
         exit(1)
@@ -596,7 +618,9 @@ if __name__ == "__main__":
 
     # Run multi-ticker backtest
     ticker_results, ticker_best_strategies = run_multi_ticker_backtest(
-        df, n_periods=8, min_data_points=12
+        df,
+        n_periods=BacktestConfig.DEFAULT_PERIODS,
+        min_data_points=BacktestConfig.MIN_DATA_POINTS,
     )
 
     if ticker_best_strategies:

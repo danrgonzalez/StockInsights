@@ -58,6 +58,21 @@ from core.data_processing import (
     calculate_sector_rankings,
     load_stock_data,
 )
+
+# Enums (new consistent vocabulary)
+from core.enums import (
+    Column,
+    Confidence,
+    DataQuality,
+    DerivedMetric,
+    Metric,
+    PredictionKey,
+    RankingSuffix,
+    Scenario,
+    Strategy,
+    Thresholds,
+    TimeWindow,
+)
 from core.predictions import predict_next_eps
 
 # Strategies
@@ -72,6 +87,18 @@ from core.strategies import (
 )
 
 __all__ = [
+    # Enums (consistent vocabulary)
+    "Strategy",
+    "Confidence",
+    "Scenario",
+    "Metric",
+    "DerivedMetric",
+    "Column",
+    "TimeWindow",
+    "DataQuality",
+    "RankingSuffix",
+    "Thresholds",
+    "PredictionKey",
     # Data loading
     "load_stock_data",
     # Core calculations

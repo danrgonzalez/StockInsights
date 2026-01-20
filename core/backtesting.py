@@ -13,6 +13,7 @@ import json
 import numpy as np
 import pandas as pd
 
+from core.enums import Column, Metric, PredictionKey, Strategy
 from core.strategies import get_all_strategies
 
 
@@ -21,21 +22,25 @@ def backtest_strategy(df, ticker, strategy_func, n_periods=8):
     Backtest a single strategy on historical data.
 
     Args:
-        df (pandas.DataFrame): Full stock data
-        ticker (str): Stock ticker to test
-        strategy_func (function): Strategy function to test
-        n_periods (int): Number of historical periods to test
+        df: Full stock data
+        ticker: Stock ticker to test
+        strategy_func: Strategy function to test
+        n_periods: Number of historical periods to test
 
     Returns:
         dict: Backtest results with predictions and actual values
     """
-    ticker_data = df[df["Ticker"] == ticker].copy()
-    ticker_data = ticker_data.sort_values("Index")
+    ticker_col = Column.TICKER.value
+    index_col = Column.INDEX.value
+    eps_col = Metric.EPS.value
+
+    ticker_data = df[df[ticker_col] == ticker].copy()
+    ticker_data = ticker_data.sort_values(index_col)
 
     if len(ticker_data) < n_periods + 8:  # Need enough data for backtesting
         return None
 
-    eps_data = ticker_data["EPS"].dropna()
+    eps_data = ticker_data[eps_col].dropna()
     if len(eps_data) < n_periods + 4:  # Need enough EPS data
         return None
 
@@ -49,8 +54,8 @@ def backtest_strategy(df, ticker, strategy_func, n_periods=8):
 
         # Get the actual next quarter value
         if cutoff_idx < len(ticker_data):
-            actual_eps = ticker_data.iloc[cutoff_idx]["EPS"]
-            actual_index = ticker_data.iloc[cutoff_idx]["Index"]
+            actual_eps = ticker_data.iloc[cutoff_idx][eps_col]
+            actual_index = ticker_data.iloc[cutoff_idx][index_col]
 
             if pd.isna(actual_eps):
                 continue
@@ -59,8 +64,8 @@ def backtest_strategy(df, ticker, strategy_func, n_periods=8):
             prediction = strategy_func(train_data)
 
             if prediction is not None:
-                predicted_eps = prediction["predicted_eps"]
-                latest_eps = prediction["latest_eps"]
+                predicted_eps = prediction[PredictionKey.PREDICTED_EPS]
+                latest_eps = prediction[PredictionKey.LATEST_EPS]
 
                 # Calculate prediction error
                 abs_error = abs(predicted_eps - actual_eps)
@@ -76,22 +81,24 @@ def backtest_strategy(df, ticker, strategy_func, n_periods=8):
                     if latest_eps != 0
                     else 0
                 )
-                predicted_growth = prediction["predicted_growth"]
+                predicted_growth = prediction[PredictionKey.PREDICTED_GROWTH]
                 growth_error = abs(predicted_growth - actual_growth)
 
                 results.append(
                     {
                         "period": i,
                         "actual_eps": actual_eps,
-                        "predicted_eps": predicted_eps,
-                        "latest_eps": latest_eps,
+                        PredictionKey.PREDICTED_EPS: predicted_eps,
+                        PredictionKey.LATEST_EPS: latest_eps,
                         "actual_growth": actual_growth,
-                        "predicted_growth": predicted_growth,
+                        PredictionKey.PREDICTED_GROWTH: predicted_growth,
                         "abs_error": abs_error,
                         "pct_error": pct_error,
                         "growth_error": growth_error,
                         "actual_index": actual_index,
-                        "confidence": prediction.get("confidence", "Unknown"),
+                        PredictionKey.CONFIDENCE: prediction.get(
+                            PredictionKey.CONFIDENCE, "Unknown"
+                        ),
                     }
                 )
 
@@ -101,6 +108,7 @@ def backtest_strategy(df, ticker, strategy_func, n_periods=8):
     results_df = pd.DataFrame(results)
 
     # Calculate summary statistics
+    pred_eps_key = PredictionKey.PREDICTED_EPS
     summary = {
         "n_predictions": len(results_df),
         "mean_abs_error": results_df["abs_error"].mean(),
@@ -110,7 +118,7 @@ def backtest_strategy(df, ticker, strategy_func, n_periods=8):
         "predictions_within_10pct": (results_df["pct_error"] <= 10).sum(),
         "predictions_within_20pct": (results_df["pct_error"] <= 20).sum(),
         "rmse": np.sqrt(
-            ((results_df["predicted_eps"] - results_df["actual_eps"]) ** 2).mean()
+            ((results_df[pred_eps_key] - results_df["actual_eps"]) ** 2).mean()
         ),
         "accuracy_score": None,  # Will calculate below
         "results_detail": results_df,
@@ -131,9 +139,9 @@ def run_backtest_comparison(df, ticker="AAPL", n_periods=8):
     Run backtesting comparison across all strategies.
 
     Args:
-        df (pandas.DataFrame): Stock data
-        ticker (str): Stock ticker to test on
-        n_periods (int): Number of historical periods to test
+        df: Stock data
+        ticker: Stock ticker to test on
+        n_periods: Number of historical periods to test
 
     Returns:
         dict: Results for each strategy
@@ -149,20 +157,20 @@ def run_backtest_comparison(df, ticker="AAPL", n_periods=8):
         print(f"\n Testing strategy: {strategy_name}")
 
         try:
-            backtest_result = backtest_strategy(df, ticker, strategy_func, n_periods)
+            result = backtest_strategy(df, ticker, strategy_func, n_periods)
 
-            if backtest_result is not None:
-                results[strategy_name] = backtest_result
+            if result is not None:
+                results[strategy_name] = result
 
                 # Print summary for this strategy
-                print(f"   Predictions made: {backtest_result['n_predictions']}")
-                print(f"   Mean % Error: {backtest_result['mean_pct_error']:.1f}%")
-                print(f"   Median % Error: {backtest_result['median_pct_error']:.1f}%")
-                print(f"   Growth Error: {backtest_result['mean_growth_error']:.1f}%")
-                print(f"   Accuracy Score: {backtest_result['accuracy_score']:.1f}")
-                within_10 = backtest_result["predictions_within_10pct"]
-                within_20 = backtest_result["predictions_within_20pct"]
-                n_pred = backtest_result["n_predictions"]
+                print(f"   Predictions made: {result['n_predictions']}")
+                print(f"   Mean % Error: {result['mean_pct_error']:.1f}%")
+                print(f"   Median % Error: {result['median_pct_error']:.1f}%")
+                print(f"   Growth Error: {result['mean_growth_error']:.1f}%")
+                print(f"   Accuracy Score: {result['accuracy_score']:.1f}")
+                within_10 = result["predictions_within_10pct"]
+                within_20 = result["predictions_within_20pct"]
+                n_pred = result["n_predictions"]
                 print(f"   Within 10%: {within_10}/{n_pred}")
                 print(f"   Within 20%: {within_20}/{n_pred}")
 
@@ -182,7 +190,7 @@ def analyze_backtest_results(results):
     Analyze and rank the backtest results.
 
     Args:
-        results (dict): Results from run_backtest_comparison
+        results: Results from run_backtest_comparison
 
     Returns:
         pandas.DataFrame: Ranked strategy performance
@@ -200,6 +208,7 @@ def analyze_backtest_results(results):
     comparison_data = []
 
     for strategy_name, result in valid_results.items():
+        n_pred = result["n_predictions"]
         comparison_data.append(
             {
                 "Strategy": strategy_name,
@@ -210,16 +219,12 @@ def analyze_backtest_results(results):
                 "RMSE": result["rmse"],
                 "Within 10%": result["predictions_within_10pct"],
                 "Within 20%": result["predictions_within_20pct"],
-                "Total Predictions": result["n_predictions"],
-                "Success Rate 10%": (
-                    result["predictions_within_10pct"] / result["n_predictions"] * 100
-                )
-                if result["n_predictions"] > 0
+                "Total Predictions": n_pred,
+                "Success Rate 10%": (result["predictions_within_10pct"] / n_pred * 100)
+                if n_pred > 0
                 else 0,
-                "Success Rate 20%": (
-                    result["predictions_within_20pct"] / result["n_predictions"] * 100
-                )
-                if result["n_predictions"] > 0
+                "Success Rate 20%": (result["predictions_within_20pct"] / n_pred * 100)
+                if n_pred > 0
                 else 0,
             }
         )
@@ -237,7 +242,7 @@ def get_best_strategy(results):
     Get the name of the best performing strategy.
 
     Args:
-        results (dict): Results from run_backtest_comparison
+        results: Results from run_backtest_comparison
 
     Returns:
         str: Name of best strategy
@@ -245,7 +250,7 @@ def get_best_strategy(results):
     comparison_df = analyze_backtest_results(results)
 
     if comparison_df is None or len(comparison_df) == 0:
-        return "weighted_growth"  # Fallback to original
+        return Strategy.WEIGHTED_GROWTH.value  # Fallback to original
 
     return comparison_df.iloc[0]["Strategy"]
 
@@ -255,7 +260,7 @@ def print_detailed_comparison(results):
     Print detailed comparison of all strategies.
 
     Args:
-        results (dict): Results from run_backtest_comparison
+        results: Results from run_backtest_comparison
     """
     comparison_df = analyze_backtest_results(results)
 
@@ -292,12 +297,12 @@ def print_detailed_comparison(results):
 
 def run_multi_ticker_backtest(df, n_periods=8, min_data_points=12):
     """
-    Run backtesting on all available tickers to find the best strategy for each.
+    Run backtesting on all tickers to find the best strategy for each.
 
     Args:
-        df (pandas.DataFrame): Stock data with all tickers
-        n_periods (int): Number of historical periods to test
-        min_data_points (int): Minimum data points required for backtesting
+        df: Stock data with all tickers
+        n_periods: Number of historical periods to test
+        min_data_points: Minimum data points required for backtesting
 
     Returns:
         tuple: (ticker_results dict, ticker_best_strategies dict)
@@ -306,7 +311,10 @@ def run_multi_ticker_backtest(df, n_periods=8, min_data_points=12):
     print("MULTI-TICKER STRATEGY OPTIMIZATION")
     print("=" * 80)
 
-    available_tickers = sorted(df["Ticker"].unique())
+    ticker_col = Column.TICKER.value
+    eps_col = Metric.EPS.value
+
+    available_tickers = sorted(df[ticker_col].unique())
     print(f"Found {len(available_tickers)} tickers in dataset")
     print(f"Testing {n_periods} historical quarters per ticker")
     print(f"Minimum {min_data_points} data points required for testing")
@@ -324,8 +332,8 @@ def run_multi_ticker_backtest(df, n_periods=8, min_data_points=12):
         print(f"{'='*60}")
 
         # Check if ticker has enough data
-        ticker_data = df[df["Ticker"] == ticker]
-        eps_data = ticker_data["EPS"].dropna()
+        ticker_data = df[df[ticker_col] == ticker]
+        eps_data = ticker_data[eps_col].dropna()
 
         if len(eps_data) < min_data_points:
             print(
@@ -348,7 +356,8 @@ def run_multi_ticker_backtest(df, n_periods=8, min_data_points=12):
                         f"Accuracy: {result['accuracy_score']:.1f}"
                     )
                 else:
-                    print(f"   {strategy_name:15} -> Failed (insufficient data)")
+                    msg = "Failed (insufficient data)"
+                    print(f"   {strategy_name:15} -> {msg}")
             except Exception as e:
                 print(f"   {strategy_name:15} -> Error: {str(e)}")
 
@@ -371,9 +380,8 @@ def run_multi_ticker_backtest(df, n_periods=8, min_data_points=12):
     print(f"{'='*80}")
     print(f"Successful tests: {successful_tests}")
     print(f"Failed tests: {failed_tests}")
-    print(
-        f"Success rate: {(successful_tests/(successful_tests+failed_tests)*100):.1f}%"
-    )
+    total = successful_tests + failed_tests
+    print(f"Success rate: {(successful_tests / total * 100):.1f}%")
 
     return ticker_results, ticker_best_strategies
 
@@ -383,7 +391,7 @@ def analyze_ticker_strategies(ticker_best_strategies):
     Analyze the distribution of best strategies across tickers.
 
     Args:
-        ticker_best_strategies (dict): Mapping of ticker to best strategy
+        ticker_best_strategies: Mapping of ticker to best strategy
 
     Returns:
         pandas.DataFrame: Strategy distribution analysis
@@ -419,10 +427,8 @@ def analyze_ticker_strategies(ticker_best_strategies):
         if len(example_tickers) <= 5:
             print(f"   Examples: {', '.join(example_tickers)}")
         else:
-            print(
-                f"   Examples: {', '.join(example_tickers[:5])} "
-                f"(+{len(example_tickers)-5} more)"
-            )
+            extra = len(example_tickers) - 5
+            print(f"   Examples: {', '.join(example_tickers[:5])} (+{extra} more)")
         print()
 
     # Create summary DataFrame
@@ -444,8 +450,8 @@ def save_ticker_strategy_mapping(
     Save the ticker-to-strategy mapping to a JSON file.
 
     Args:
-        ticker_best_strategies (dict): Mapping of ticker to best strategy
-        filename (str): Output filename
+        ticker_best_strategies: Mapping of ticker to best strategy
+        filename: Output filename
     """
     if not ticker_best_strategies:
         print("No mapping data to save")
@@ -469,8 +475,8 @@ def load_ticker_strategy_mapping(
     Load the ticker-to-strategy mapping from a JSON file.
 
     Args:
-        filename (str): Input filename
-        verbose (bool): Whether to print status messages (default: False)
+        filename: Input filename
+        verbose: Whether to print status messages (default: False)
 
     Returns:
         dict: Mapping of ticker to best strategy, or None if loading fails
@@ -495,20 +501,23 @@ def load_ticker_strategy_mapping(
 
 
 def get_ticker_strategy(
-    ticker, ticker_strategy_mapping=None, default_strategy="seasonal", verbose=False
+    ticker, ticker_strategy_mapping=None, default_strategy=None, verbose=False
 ):
     """
     Get the best strategy for a specific ticker.
 
     Args:
-        ticker (str): Stock ticker symbol
-        ticker_strategy_mapping (dict, optional): Pre-loaded mapping
-        default_strategy (str): Fallback strategy if ticker not found
-        verbose (bool): Whether to print status messages (default: False)
+        ticker: Stock ticker symbol
+        ticker_strategy_mapping: Pre-loaded mapping
+        default_strategy: Fallback strategy if ticker not found
+        verbose: Whether to print status messages (default: False)
 
     Returns:
         str: Best strategy name for the ticker
     """
+    if default_strategy is None:
+        default_strategy = Strategy.SEASONAL.value
+
     if ticker_strategy_mapping is None:
         ticker_strategy_mapping = load_ticker_strategy_mapping(verbose=verbose)
 
@@ -517,7 +526,7 @@ def get_ticker_strategy(
 
     # Fallback to default strategy
     if verbose:
-        print(f"No specific strategy found for {ticker}, using {default_strategy}")
+        print(f"No specific strategy for {ticker}, using {default_strategy}")
     return default_strategy
 
 
@@ -526,8 +535,8 @@ def display_detailed_ticker_results(ticker_results, top_n=10):
     Display detailed results for top performing tickers.
 
     Args:
-        ticker_results (dict): Full backtest results for all tickers
-        top_n (int): Number of top tickers to show details for
+        ticker_results: Full backtest results for all tickers
+        top_n: Number of top tickers to show details for
     """
     if not ticker_results:
         print("No detailed results to display")
@@ -559,10 +568,13 @@ def display_detailed_ticker_results(ticker_results, top_n=10):
 
         for j, (strategy, result) in enumerate(sorted_strategies, 1):
             marker = "* " if j == 1 else "  "
+            score = result["accuracy_score"]
+            err = result["mean_pct_error"]
+            w20 = result["predictions_within_20pct"]
+            n = result["n_predictions"]
             print(
-                f"   {marker}{strategy:15} | Score: {result['accuracy_score']:5.1f} | "
-                f"Mean Error: {result['mean_pct_error']:5.1f}% | "
-                f"20%: {result['predictions_within_20pct']}/{result['n_predictions']}"
+                f"   {marker}{strategy:15} | Score: {score:5.1f} | "
+                f"Mean Error: {err:5.1f}% | 20%: {w20}/{n}"
             )
 
 

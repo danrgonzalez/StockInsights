@@ -7,7 +7,7 @@ TOS data from 2024-06-21.
 """
 
 from enum import Enum
-from typing import NamedTuple
+from typing import List, NamedTuple, Optional
 
 from pydantic import BaseModel
 
@@ -45,7 +45,6 @@ class Industry(str, Enum):
     DIVERSIFIED_TELECOMMUNICATION_SERVICES = "Diversified Telecommunication Services"
     ELECTRIC_UTILITIES = "Electric Utilities"
     ELECTRICAL_EQUIPMENT = "Electrical Equipment"
-    ELECTRONIC_EQUIPMENT_INSTRUMENTS = "Electronic Equipment, Instruments & Components"
     ENERGY_EQUIPMENT_SERVICES = "Energy Equipment & Services"
     ENTERTAINMENT = "Entertainment"
     FINANCIAL_SERVICES = "Financial Services"
@@ -57,22 +56,15 @@ class Industry(str, Enum):
     HOUSEHOLD_DURABLES = "Household Durables"
     HOUSEHOLD_PRODUCTS = "Household Products"
     INDUSTRIAL_CONGLOMERATES = "Industrial Conglomerates"
-    INSURANCE = "Insurance"
     INTERACTIVE_MEDIA_SERVICES = "Interactive Media & Services"
     IT_SERVICES = "IT Services"
-    LIFE_SCIENCES_TOOLS_SERVICES = "Life Sciences Tools & Services"
     MACHINERY = "Machinery"
     MEDIA = "Media"
-    METALS_MINING = "Metals & Mining"
-    MULTILINE_RETAIL = "Multiline Retail"
     MULTI_UTILITIES = "Multi-Utilities"
     OIL_GAS_CONSUMABLE_FUELS = "Oil, Gas & Consumable Fuels"
     PASSENGER_AIRLINES = "Passenger Airlines"
-    PERSONAL_PRODUCTS = "Personal Products"
     PHARMACEUTICALS = "Pharmaceuticals"
     PROFESSIONAL_SERVICES = "Professional Services"
-    REAL_ESTATE_MANAGEMENT_DEVELOPMENT = "Real Estate Management & Development"
-    ROAD_RAIL = "Road & Rail"
     SEMICONDUCTORS_SEMICONDUCTOR_EQUIPMENT = "Semiconductors & Semiconductor Equipment"
     SOFTWARE = "Software"
     SPECIALTY_RETAIL = "Specialty Retail"
@@ -104,26 +96,16 @@ class SubIndustry(str, Enum):
     CONSTRUCTION_MATERIALS = "Construction Materials"
     CONSUMER_ELECTRONICS = "Consumer Electronics"
     CONSUMER_FINANCE = "Consumer Finance"
-    CONSUMER_STAPLES_DISTRIBUTION_RETAIL = "Consumer Staples Distribution & Retail"
     CONSUMER_STAPLES_MERCHANDISE_RETAIL = "Consumer Staples Merchandise Retail"
     DISTILLERS_VINTNERS = "Distillers & Vintners"
     DIVERSIFIED_BANKS = "Diversified Banks"
-    DRUG_RETAIL = "Drug Retail"
     ELECTRIC_UTILITIES = "Electric Utilities"
     ELECTRICAL_COMPONENTS_EQUIPMENT = "Electrical Components & Equipment"
-    ELECTRONIC_EQUIPMENT_INSTRUMENTS_COMPONENTS = (
-        "Electronic Equipment, Instruments & Components"
-    )
-    FOOD_DISTRIBUTORS = "Food Distributors"
-    FOOD_PRODUCTS = "Food Products"
     FOOD_RETAIL = "Food Retail"
     FOOTWEAR = "Footwear"
-    HEALTH_CARE_DISTRIBUTORS = "Health Care Distributors"
     HEALTH_CARE_EQUIPMENT = "Health Care Equipment"
     HEALTH_CARE_SERVICES = "Health Care Services"
-    HEALTH_CARE_SUPPLIES = "Health Care Supplies"
     HOME_IMPROVEMENT_RETAIL = "Home Improvement Retail"
-    HOMEBUILDING = "Homebuilding"
     HOMEFURNISHING_RETAIL = "Homefurnishing Retail"
     HOTELS_RESORTS_CRUISE_LINES = "Hotels, Resorts & Cruise Lines"
     HOUSEHOLD_PRODUCTS = "Household Products"
@@ -135,35 +117,23 @@ class SubIndustry(str, Enum):
     INTERNET_SERVICES_INFRASTRUCTURE = "Internet Services & Infrastructure"
     INVESTMENT_BANKING_BROKERAGE = "Investment Banking & Brokerage"
     IT_CONSULTING_OTHER_SERVICES = "IT Consulting & Other Services"
-    LIFE_SCIENCES_TOOLS_SERVICES = "Life Sciences Tools & Services"
-    MACHINERY = "Machinery"
     MANAGED_HEALTH_CARE = "Managed Health Care"
     MOVIES_ENTERTAINMENT = "Movies & Entertainment"
     MULTI_SECTOR_HOLDINGS = "Multi-Sector Holdings"
     MULTI_UTILITIES = "Multi-Utilities"
-    MULTILINE_INSURANCE = "Multiline Insurance"
     OIL_GAS_EQUIPMENT_SERVICES = "Oil & Gas Equipment & Services"
     OIL_GAS_EXPLORATION_PRODUCTION = "Oil & Gas Exploration & Production"
-    OIL_GAS_REFINING_MARKETING = "Oil & Gas Refining & Marketing"
     OIL_GAS_STORAGE_TRANSPORTATION = "Oil & Gas Storage & Transportation"
     OTHER_SPECIALTY_RETAIL = "Other Specialty Retail"
     PACKAGED_FOODS_MEATS = "Packaged Foods & Meats"
     PASSENGER_AIRLINES = "Passenger Airlines"
-    PERSONAL_PRODUCTS = "Personal Products"
     PHARMACEUTICALS = "Pharmaceuticals"
-    PRECIOUS_METALS_MINERALS = "Precious Metals & Minerals"
-    PROPERTY_CASUALTY_INSURANCE = "Property & Casualty Insurance"
     RAIL_TRANSPORTATION = "Rail Transportation"
-    RAILROADS = "Railroads"
-    REAL_ESTATE_SERVICES = "Real Estate Services"
     RESEARCH_CONSULTING_SERVICES = "Research & Consulting Services"
     RESTAURANTS = "Restaurants"
     SEMICONDUCTORS = "Semiconductors"
-    SOFT_DRINKS = "Soft Drinks"
     SOFT_DRINKS_NONALCOHOLIC_BEVERAGES = "Soft Drinks & Non-alcoholic Beverages"
-    SPECIALIZED_FINANCE = "Specialized Finance"
     SPECIALTY_CHEMICALS = "Specialty Chemicals"
-    STEEL = "Steel"
     SYSTEMS_SOFTWARE = "Systems Software"
     TECHNOLOGY_HARDWARE_STORAGE_PERIPHERALS = (
         "Technology Hardware, Storage & Peripherals"
@@ -172,7 +142,6 @@ class SubIndustry(str, Enum):
     TRANSACTION_PAYMENT_PROCESSING_SERVICES = (
         "Transaction & Payment Processing Services"
     )
-    WIRELESS_TELECOMMUNICATION_SERVICES = "Wireless Telecommunication Services"
 
 
 class StockClassification(NamedTuple):
@@ -227,8 +196,6 @@ class StockSymbol(str, Enum):
     D = "D"
     DAL = "DAL"
     DECK = "DECK"
-    DFS = "DFS"
-    DHR = "DHR"
     DIS = "DIS"
     DPZ = "DPZ"
     DUK = "DUK"
@@ -238,11 +205,8 @@ class StockSymbol(str, Enum):
     EOG = "EOG"
     ETN = "ETN"
     EW = "EW"
-    EXC = "EXC"
     EXPE = "EXPE"
     F = "F"
-    FCX = "FCX"
-    FDX = "FDX"
     FFIV = "FFIV"
     FSLR = "FSLR"
     GD = "GD"
@@ -1074,8 +1038,7 @@ class StockInfoModel(BaseModel):
         use_enum_values = True
 
 
-def get_stock_classification(symbol):
-    # type: (str) -> Optional[StockClassification]
+def get_stock_classification(symbol: str) -> Optional[StockClassification]:
     """
     Get the classification for a given stock symbol.
 
@@ -1098,8 +1061,7 @@ def get_stock_classification(symbol):
         return None
 
 
-def get_stocks_by_sector(sector):
-    # type: (Sector) -> List[StockSymbol]
+def get_stocks_by_sector(sector: Sector) -> List[StockSymbol]:
     """
     Get all stock symbols belonging to a specific sector.
 
@@ -1116,8 +1078,7 @@ def get_stocks_by_sector(sector):
     ]
 
 
-def get_stocks_by_industry(industry):
-    # type: (Industry) -> List[StockSymbol]
+def get_stocks_by_industry(industry: Industry) -> List[StockSymbol]:
     """
     Get all stock symbols belonging to a specific industry.
 
@@ -1134,8 +1095,7 @@ def get_stocks_by_industry(industry):
     ]
 
 
-def get_stocks_by_sub_industry(sub_industry):
-    # type: (SubIndustry) -> List[StockSymbol]
+def get_stocks_by_sub_industry(sub_industry: SubIndustry) -> List[StockSymbol]:
     """
     Get all stock symbols belonging to a specific sub-industry.
 

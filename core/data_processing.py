@@ -8,6 +8,15 @@ making it suitable for use in any application (Streamlit, CLI, API, etc.).
 import numpy as np
 import pandas as pd
 
+from core.enums import (
+    Column,
+    DataQuality,
+    DerivedMetric,
+    Metric,
+    RankingSuffix,
+    Thresholds,
+)
+
 
 def load_stock_data(file_path: str) -> pd.DataFrame | None:
     """
@@ -23,29 +32,31 @@ def load_stock_data(file_path: str) -> pd.DataFrame | None:
         df = pd.read_excel(file_path)
 
         # Clean numeric columns - convert non-numeric values to NaN
-        numeric_columns = ["EPS", "Revenue", "Price", "DivAmt", "Index"]
+        numeric_columns = Metric.numeric_columns()
         for col in numeric_columns:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors="coerce")
 
         # Clean and normalize ticker symbols
-        if "Ticker" in df.columns:
+        ticker_col = Column.TICKER.value
+        if ticker_col in df.columns:
             try:
                 from core.classifications import normalize_symbol
 
-                df["Ticker"] = df["Ticker"].astype(str).apply(normalize_symbol)
+                df[ticker_col] = df[ticker_col].astype(str).apply(normalize_symbol)
             except ImportError:
-                df["Ticker"] = df["Ticker"].astype(str).str.strip().str.upper()
+                df[ticker_col] = df[ticker_col].astype(str).str.strip().str.upper()
 
         # Clean other text columns
+        report_col = Column.REPORT.value
         for col in df.select_dtypes(include=["object"]).columns:
-            if col not in ["Ticker", "Report"]:
+            if col not in [ticker_col, report_col]:
                 df[col] = df[col].astype(str).str.strip()
                 df[col] = df[col].replace("", np.nan)
 
         # Remove duplicates
-        if "Ticker" in df.columns:
-            df = df.drop_duplicates(subset=["Ticker", "Report"], keep="first")
+        if ticker_col in df.columns:
+            df = df.drop_duplicates(subset=[ticker_col, report_col], keep="first")
 
         return df
     except FileNotFoundError:
@@ -69,83 +80,84 @@ def calculate_qoq_changes(df: pd.DataFrame) -> pd.DataFrame:
     - Dividend growth rate
 
     Args:
-        df: Stock data DataFrame with Ticker, Index, EPS, Revenue, Price, DivAmt
+        df: Stock data DataFrame with Ticker, Index, EPS, Revenue, Price,
+            DivAmt
 
     Returns:
         DataFrame with all calculated metrics added
     """
     df_with_qoq = df.copy()
-    df_with_qoq = df_with_qoq.sort_values(["Ticker", "Index"])
+    ticker_col = Column.TICKER.value
+    index_col = Column.INDEX.value
+    df_with_qoq = df_with_qoq.sort_values([ticker_col, index_col])
 
-    for ticker in df_with_qoq["Ticker"].unique():
-        ticker_mask = df_with_qoq["Ticker"] == ticker
+    for ticker in df_with_qoq[ticker_col].unique():
+        ticker_mask = df_with_qoq[ticker_col] == ticker
         ticker_data = df_with_qoq[ticker_mask].copy()
 
         # Calculate TTM (Trailing Twelve Months) values
-        for metric in ["EPS", "Revenue"]:
+        for metric in [Metric.EPS.value, Metric.REVENUE.value]:
             if metric in ticker_data.columns:
                 ttm_values = ticker_data[metric].rolling(window=4, min_periods=4).sum()
-                df_with_qoq.loc[ticker_mask, f"{metric}_TTM"] = ttm_values
+                ttm_col = f"{metric}_TTM"
+                df_with_qoq.loc[ticker_mask, ttm_col] = ttm_values
 
         # Calculate P/E Multiple
+        price_col = Metric.PRICE.value
+        eps_ttm_col = DerivedMetric.EPS_TTM.value
+        multiple_col = DerivedMetric.MULTIPLE.value
         if (
-            "Price" in ticker_data.columns
-            and "EPS_TTM" in df_with_qoq.loc[ticker_mask].columns
+            price_col in ticker_data.columns
+            and eps_ttm_col in df_with_qoq.loc[ticker_mask].columns
         ):
-            price_data = ticker_data["Price"]
-            eps_ttm_data = df_with_qoq.loc[ticker_mask, "EPS_TTM"]
+            price_data = ticker_data[price_col]
+            eps_ttm_data = df_with_qoq.loc[ticker_mask, eps_ttm_col]
             multiple = price_data / eps_ttm_data
             multiple = multiple.replace([np.inf, -np.inf], np.nan)
-            df_with_qoq.loc[ticker_mask, "Multiple"] = multiple
+            df_with_qoq.loc[ticker_mask, multiple_col] = multiple
 
         # Calculate dividend yields
-        if "Price" in ticker_data.columns and "DivAmt" in ticker_data.columns:
-            price_data = ticker_data["Price"]
-            div_data = ticker_data["DivAmt"]
+        div_col = Metric.DIVIDEND_AMOUNT.value
+        if price_col in ticker_data.columns and div_col in ticker_data.columns:
+            price_data = ticker_data[price_col]
+            div_data = ticker_data[div_col]
 
             # Quarterly dividend yield
             dividend_yield = (div_data / price_data) * 100
             dividend_yield = dividend_yield.replace([np.inf, -np.inf], np.nan)
-            df_with_qoq.loc[ticker_mask, "DivYield"] = dividend_yield
+            div_yield_col = DerivedMetric.DIVIDEND_YIELD.value
+            df_with_qoq.loc[ticker_mask, div_yield_col] = dividend_yield
 
             # Annualized dividend yield
             dividend_yield_annual = (div_data * 4 / price_data) * 100
             dividend_yield_annual = dividend_yield_annual.replace(
                 [np.inf, -np.inf], np.nan
             )
-            df_with_qoq.loc[ticker_mask, "DivYieldAnnual"] = dividend_yield_annual
+            div_yield_ann_col = DerivedMetric.DIVIDEND_YIELD_ANNUAL.value
+            df_with_qoq.loc[ticker_mask, div_yield_ann_col] = dividend_yield_annual
 
         # Calculate Payout Ratio
         if (
-            "DivAmt" in ticker_data.columns
-            and "EPS_TTM" in df_with_qoq.loc[ticker_mask].columns
+            div_col in ticker_data.columns
+            and eps_ttm_col in df_with_qoq.loc[ticker_mask].columns
         ):
-            div_data = ticker_data["DivAmt"]
-            eps_ttm_data = df_with_qoq.loc[ticker_mask, "EPS_TTM"]
+            div_data = ticker_data[div_col]
+            eps_ttm_data = df_with_qoq.loc[ticker_mask, eps_ttm_col]
             annual_div = div_data * 4
             payout_ratio = (annual_div / eps_ttm_data) * 100
             payout_ratio = payout_ratio.replace([np.inf, -np.inf], np.nan)
-            df_with_qoq.loc[ticker_mask, "PayoutRatio"] = payout_ratio
+            payout_col = DerivedMetric.PAYOUT_RATIO.value
+            df_with_qoq.loc[ticker_mask, payout_col] = payout_ratio
 
     # Calculate QoQ changes for all metrics
-    df_with_qoq = df_with_qoq.sort_values(["Ticker", "Index"])
+    df_with_qoq = df_with_qoq.sort_values([ticker_col, index_col])
 
-    for ticker in df_with_qoq["Ticker"].unique():
-        ticker_mask = df_with_qoq["Ticker"] == ticker
+    for ticker in df_with_qoq[ticker_col].unique():
+        ticker_mask = df_with_qoq[ticker_col] == ticker
         ticker_data = df_with_qoq[ticker_mask].copy()
 
-        for metric in [
-            "EPS",
-            "Revenue",
-            "Price",
-            "EPS_TTM",
-            "Revenue_TTM",
-            "Multiple",
-            "DivAmt",
-            "DivYield",
-            "DivYieldAnnual",
-            "PayoutRatio",
-        ]:
+        # Use the enum method for QoQ metrics list
+        for metric in DerivedMetric.qoq_metrics():
             if metric in ticker_data.columns:
                 qoq_change = ticker_data[metric].pct_change(fill_method=None) * 100
                 df_with_qoq.loc[ticker_mask, f"{metric}_QoQ"] = qoq_change
@@ -154,26 +166,31 @@ def calculate_qoq_changes(df: pd.DataFrame) -> pd.DataFrame:
         ticker_data_with_qoq = df_with_qoq[ticker_mask].copy()
 
         # EPS Growth Momentum
-        if "EPS_QoQ" in ticker_data_with_qoq.columns:
-            eps_qoq_values = ticker_data_with_qoq["EPS_QoQ"].dropna()
+        eps_qoq_col = DerivedMetric.EPS_QOQ.value
+        if eps_qoq_col in ticker_data_with_qoq.columns:
+            eps_qoq_values = ticker_data_with_qoq[eps_qoq_col].dropna()
             if len(eps_qoq_values) >= 8:
                 rolling_4q = eps_qoq_values.rolling(window=4, min_periods=4).mean()
                 rolling_8q = eps_qoq_values.rolling(window=8, min_periods=8).mean()
                 eps_momentum = rolling_4q - rolling_8q
-                df_with_qoq.loc[ticker_mask, "EPSMomentum"] = eps_momentum
+                momentum_col = DerivedMetric.EPS_MOMENTUM.value
+                df_with_qoq.loc[ticker_mask, momentum_col] = eps_momentum
 
         # Price Volatility
-        if "Price_QoQ" in ticker_data_with_qoq.columns:
-            price_qoq_values = ticker_data_with_qoq["Price_QoQ"].dropna()
+        price_qoq_col = DerivedMetric.PRICE_QOQ.value
+        if price_qoq_col in ticker_data_with_qoq.columns:
+            price_qoq_values = ticker_data_with_qoq[price_qoq_col].dropna()
             if len(price_qoq_values) >= 4:
                 price_volatility = price_qoq_values.rolling(
                     window=8, min_periods=4
                 ).std()
-                df_with_qoq.loc[ticker_mask, "PriceVolatility"] = price_volatility
+                volatility_col = DerivedMetric.PRICE_VOLATILITY.value
+                df_with_qoq.loc[ticker_mask, volatility_col] = price_volatility
 
         # Revenue Consistency
-        if "Revenue_QoQ" in ticker_data_with_qoq.columns:
-            revenue_qoq_values = ticker_data_with_qoq["Revenue_QoQ"].dropna()
+        rev_qoq_col = DerivedMetric.REVENUE_QOQ.value
+        if rev_qoq_col in ticker_data_with_qoq.columns:
+            revenue_qoq_values = ticker_data_with_qoq[rev_qoq_col].dropna()
             if len(revenue_qoq_values) >= 4:
                 rolling_mean = revenue_qoq_values.rolling(
                     window=8, min_periods=4
@@ -183,39 +200,44 @@ def calculate_qoq_changes(df: pd.DataFrame) -> pd.DataFrame:
                 revenue_consistency = revenue_consistency.replace(
                     [np.inf, -np.inf], np.nan
                 )
-                df_with_qoq.loc[ticker_mask, "RevenueConsistency"] = revenue_consistency
+                consistency_col = DerivedMetric.REVENUE_CONSISTENCY.value
+                df_with_qoq.loc[ticker_mask, consistency_col] = revenue_consistency
 
         # Dividend Growth Rate
-        if "DivAmt" in ticker_data_with_qoq.columns:
+        if div_col in ticker_data_with_qoq.columns:
             df_with_qoq = _calculate_dividend_growth(
                 df_with_qoq, ticker_mask, ticker_data_with_qoq
             )
 
         # PEG Ratio
         if (
-            "Multiple" in ticker_data_with_qoq.columns
-            and "EPS_QoQ" in ticker_data_with_qoq.columns
+            multiple_col in ticker_data_with_qoq.columns
+            and eps_qoq_col in ticker_data_with_qoq.columns
         ):
-            multiple_data = ticker_data_with_qoq["Multiple"]
-            eps_qoq_values = ticker_data_with_qoq["EPS_QoQ"].dropna()
+            multiple_data = ticker_data_with_qoq[multiple_col]
+            eps_qoq_values = ticker_data_with_qoq[eps_qoq_col].dropna()
             if len(eps_qoq_values) >= 4:
                 eps_growth_4q = eps_qoq_values.rolling(window=4, min_periods=4).mean()
                 eps_growth_annual = ((1 + eps_growth_4q / 100) ** 4 - 1) * 100
                 peg_ratio = multiple_data / eps_growth_annual.abs()
                 peg_ratio = peg_ratio.replace([np.inf, -np.inf], np.nan)
-                df_with_qoq.loc[ticker_mask, "PEGRatio"] = peg_ratio
+                peg_col = DerivedMetric.PEG_RATIO.value
+                df_with_qoq.loc[ticker_mask, peg_col] = peg_ratio
 
         # PEGY Ratio
+        peg_col = DerivedMetric.PEG_RATIO.value
+        div_yield_ann_col = DerivedMetric.DIVIDEND_YIELD_ANNUAL.value
         if (
-            "PEGRatio" in df_with_qoq.loc[ticker_mask].columns
-            and "DivYieldAnnual" in df_with_qoq.loc[ticker_mask].columns
+            peg_col in df_with_qoq.loc[ticker_mask].columns
+            and div_yield_ann_col in df_with_qoq.loc[ticker_mask].columns
         ):
-            peg_data = df_with_qoq.loc[ticker_mask, "PEGRatio"]
-            div_yield_annual_data = df_with_qoq.loc[ticker_mask, "DivYieldAnnual"]
+            peg_data = df_with_qoq.loc[ticker_mask, peg_col]
+            div_yield_annual_data = df_with_qoq.loc[ticker_mask, div_yield_ann_col]
             pegy_ratio = np.where(
                 div_yield_annual_data > 0, peg_data / div_yield_annual_data, np.nan
             )
-            df_with_qoq.loc[ticker_mask, "PEGYRatio"] = pegy_ratio
+            pegy_col = DerivedMetric.PEGY_RATIO.value
+            df_with_qoq.loc[ticker_mask, pegy_col] = pegy_ratio
 
     return df_with_qoq
 
@@ -226,7 +248,8 @@ def _calculate_dividend_growth(
     ticker_data: pd.DataFrame,
 ) -> pd.DataFrame:
     """Calculate dividend growth rate for a ticker."""
-    div_amounts = ticker_data["DivAmt"].dropna()
+    div_col = Metric.DIVIDEND_AMOUNT.value
+    div_amounts = ticker_data[div_col].dropna()
     if len(div_amounts) < 4:
         return df_with_qoq
 
@@ -264,17 +287,21 @@ def _calculate_dividend_growth(
         if first_div > 0 and total_periods > 4:
             years = total_periods / 4
             annual_growth = ((last_div / first_div) ** (1 / years) - 1) * 100
-            df_with_qoq.loc[ticker_mask, "DivGrowthRate"] = annual_growth
+            growth_col = DerivedMetric.DIVIDEND_GROWTH_RATE.value
+            df_with_qoq.loc[ticker_mask, growth_col] = annual_growth
 
         increases = [change for change in div_changes if change["growth_rate"] > 0]
         if len(increases) > 0:
             avg_increase_rate = np.mean([inc["growth_rate"] for inc in increases])
-            df_with_qoq.loc[ticker_mask, "DivIncreaseFreq"] = len(increases) / (
+            freq_col = DerivedMetric.DIVIDEND_INCREASE_FREQ.value
+            avg_col = DerivedMetric.AVG_DIVIDEND_INCREASE.value
+            df_with_qoq.loc[ticker_mask, freq_col] = len(increases) / (
                 total_periods / 4
             )
-            df_with_qoq.loc[ticker_mask, "AvgDivIncrease"] = avg_increase_rate
+            df_with_qoq.loc[ticker_mask, avg_col] = avg_increase_rate
     else:
-        df_with_qoq.loc[ticker_mask, "DivGrowthRate"] = 0.0
+        growth_col = DerivedMetric.DIVIDEND_GROWTH_RATE.value
+        df_with_qoq.loc[ticker_mask, growth_col] = 0.0
 
     return df_with_qoq
 
@@ -289,31 +316,27 @@ def calculate_sector_rankings(df: pd.DataFrame) -> pd.DataFrame:
     Returns:
         DataFrame with sector ranking columns added
     """
-    if "Sector" not in df.columns:
+    sector_col = Column.SECTOR.value
+    if sector_col not in df.columns:
         return df
 
     df_with_rankings = df.copy()
 
-    positive_metrics = [
-        "EPS_TTM",
-        "Revenue_TTM",
-        "DivYield",
-        "DivYieldAnnual",
-        "RevenueConsistency",
-        "EPSMomentum",
-    ]
-    negative_metrics = ["Multiple", "PriceVolatility", "PEGRatio", "PEGYRatio"]
+    positive_metrics = DerivedMetric.positive_ranking_metrics()
+    negative_metrics = DerivedMetric.negative_ranking_metrics()
+
+    invalid_sectors = DataQuality.invalid_values()
 
     for metric in positive_metrics + negative_metrics:
         if metric in df.columns:
-            ranking_col = f"{metric}_SectorRank"
+            ranking_col = RankingSuffix.SECTOR_RANK.column_name(metric)
             df_with_rankings[ranking_col] = np.nan
 
-            for sector in df["Sector"].unique():
-                if sector in ["Unknown", "Unclassified", "N/A", None]:
+            for sector in df[sector_col].unique():
+                if sector in invalid_sectors:
                     continue
 
-                sector_mask = df_with_rankings["Sector"] == sector
+                sector_mask = df_with_rankings[sector_col] == sector
                 sector_data = df_with_rankings[sector_mask][metric].dropna()
 
                 if len(sector_data) > 1:
@@ -340,8 +363,17 @@ def calculate_outperformance_ratios(df: pd.DataFrame) -> pd.DataFrame:
         DataFrame with outperformance ratio columns added
     """
     df_with_outperf = df.copy()
+    sector_col = Column.SECTOR.value
 
-    metrics = ["Price_QoQ", "EPS_QoQ", "Revenue_QoQ", "EPS_TTM", "Revenue_TTM"]
+    metrics = [
+        DerivedMetric.PRICE_QOQ.value,
+        DerivedMetric.EPS_QOQ.value,
+        DerivedMetric.REVENUE_QOQ.value,
+        DerivedMetric.EPS_TTM.value,
+        DerivedMetric.REVENUE_TTM.value,
+    ]
+
+    invalid_sectors = DataQuality.invalid_values()
 
     for metric in metrics:
         if metric not in df.columns:
@@ -349,21 +381,21 @@ def calculate_outperformance_ratios(df: pd.DataFrame) -> pd.DataFrame:
 
         # Market outperformance
         market_avg = df[metric].mean()
-        market_outperf_col = f"{metric}_MarketOutperf"
+        market_outperf_col = RankingSuffix.MARKET_OUTPERF.column_name(metric)
         df_with_outperf[market_outperf_col] = (
             (df[metric] / market_avg) * 100 if market_avg != 0 else np.nan
         )
 
         # Sector outperformance
-        if "Sector" in df.columns:
-            sector_outperf_col = f"{metric}_SectorOutperf"
+        if sector_col in df.columns:
+            sector_outperf_col = RankingSuffix.SECTOR_OUTPERF.column_name(metric)
             df_with_outperf[sector_outperf_col] = np.nan
 
-            for sector in df["Sector"].unique():
-                if sector in ["Unknown", "Unclassified", "N/A", None]:
+            for sector in df[sector_col].unique():
+                if sector in invalid_sectors:
                     continue
 
-                sector_mask = df_with_outperf["Sector"] == sector
+                sector_mask = df_with_outperf[sector_col] == sector
                 sector_avg = df_with_outperf[sector_mask][metric].mean()
 
                 if sector_avg != 0 and not pd.isna(sector_avg):
@@ -389,39 +421,44 @@ def calculate_downside_capture(df: pd.DataFrame) -> pd.DataFrame:
     Returns:
         DataFrame with downside capture column added
     """
-    if "Price_QoQ" not in df.columns:
+    price_qoq_col = DerivedMetric.PRICE_QOQ.value
+    if price_qoq_col not in df.columns:
         return df
 
     df_with_downside = df.copy()
+    ticker_col = Column.TICKER.value
+    index_col = Column.INDEX.value
+    downside_col = DerivedMetric.DOWNSIDE_CAPTURE.value
 
-    market_performance = df.groupby("Index")["Price_QoQ"].mean().dropna()
+    market_performance = df.groupby(index_col)[price_qoq_col].mean().dropna()
     negative_periods = market_performance[market_performance < 0]
 
     if len(negative_periods) == 0:
-        df_with_downside["DownsideCapture"] = np.nan
+        df_with_downside[downside_col] = np.nan
         return df_with_downside
 
-    df_with_downside["DownsideCapture"] = np.nan
+    df_with_downside[downside_col] = np.nan
+    min_periods = Thresholds.MIN_DOWNSIDE_PERIODS
 
-    for ticker in df["Ticker"].unique():
-        ticker_mask = df_with_downside["Ticker"] == ticker
+    for ticker in df[ticker_col].unique():
+        ticker_mask = df_with_downside[ticker_col] == ticker
         ticker_data = df_with_downside[ticker_mask].copy()
 
         ticker_downside_periods = []
         market_downside_periods = []
 
         for index, market_return in negative_periods.items():
-            ticker_return = ticker_data[ticker_data["Index"] == index]["Price_QoQ"]
+            ticker_return = ticker_data[ticker_data[index_col] == index][price_qoq_col]
             if not ticker_return.empty and not pd.isna(ticker_return.iloc[0]):
                 ticker_downside_periods.append(ticker_return.iloc[0])
                 market_downside_periods.append(market_return)
 
-        if len(ticker_downside_periods) >= 3:
+        if len(ticker_downside_periods) >= min_periods:
             ticker_avg_down = np.mean(ticker_downside_periods)
             market_avg_down = np.mean(market_downside_periods)
 
             if market_avg_down != 0:
                 downside_capture = (ticker_avg_down / market_avg_down) * 100
-                df_with_downside.loc[ticker_mask, "DownsideCapture"] = downside_capture
+                df_with_downside.loc[ticker_mask, downside_col] = downside_capture
 
     return df_with_downside

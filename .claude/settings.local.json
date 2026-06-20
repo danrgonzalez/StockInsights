@@ -9,7 +9,11 @@
       "Bash(git push:*)",
       "Bash(sed:*)",
       "Bash(wc:*)",
-      "Bash(pre-commit run:*)"
+      "Bash(pre-commit run:*)",
+      "Bash(cd /Users/dgonzalez/Library/CloudStorage/GoogleDrive-danrgonzalez@gmail.com/My\\\\ Drive/GDrive/python/StockInsights && python3:*)",
+      "Bash(git mv:*)",
+      "Bash(git rm:*)",
+      "Bash(python3:*)"
     ],
     "defaultMode": "acceptEdits"
   }

@@ -174,9 +174,25 @@ print(f"Confidence: {prediction['confidence']}")
 ## Running the Application
 
 ### Environment Setup (Conda Users)
+
+First-time setup — create the `stockinsights` environment:
+```bash
+conda create -n stockinsights -c conda-forge python=3.11
+conda activate stockinsights
+pip install -r requirements.txt
+```
+
+For every session after that, activate the environment with:
 ```bash
 source setup_env.sh
 ```
+
+> **Apple silicon (M1/M2/M3/M4) note:** Use a native **arm64** conda
+> (e.g. [Miniconda for Apple silicon](https://docs.conda.io/projects/miniconda/)).
+> An Intel build of Anaconda runs under Rosetta, which Apple is deprecating
+> (support ends after macOS 27). To confirm your environment is native, run
+> `python -c "import platform; print(platform.machine())"` — it should print
+> `arm64`, not `x86_64`.
 
 ### Option 1: Automated Workflow (Recommended)
 ```bash

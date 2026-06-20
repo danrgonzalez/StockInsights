@@ -89,6 +89,56 @@ def load_csv_simple_moving_avg(csv_path):
         return {}
 
 
+def _earnings_date_column_name():
+    """Return the standard EarningsDate column name from the shared schema."""
+    try:
+        from core.enums import Column
+
+        return Column.EARNINGS_DATE.value
+    except ImportError:
+        return "EarningsDate"
+
+
+def rename_earnings_date_column(df):
+    """
+    Detect the manually-added quarterly earnings report date column and give
+    it a proper header so it survives the 'Unnamed:' column cleanup.
+
+    The earnings date is entered in the source spreadsheet without a header,
+    so pandas reads it as an 'Unnamed: N' column. We identify it as the
+    unnamed column whose values are predominantly dates and rename it to the
+    standard EarningsDate column. Other stray unnamed columns (e.g. free-text
+    notes) are left untouched and dropped later as before.
+
+    Args:
+        df (pandas.DataFrame): Raw dataframe read from the source Excel file
+
+    Returns:
+        pandas.DataFrame: Same dataframe with the earnings date column renamed
+    """
+    earnings_col = _earnings_date_column_name()
+
+    # Already has a proper header (e.g. user added one in Excel) - nothing to do
+    if earnings_col in df.columns:
+        return df
+
+    for col in df.columns:
+        if "Unnamed:" not in str(col):
+            continue
+
+        non_null = df[col].dropna()
+        if non_null.empty:
+            continue
+
+        parsed = pd.to_datetime(non_null, errors="coerce")
+        # Treat as the earnings date column when most values parse as dates
+        if parsed.notna().mean() >= 0.8:
+            print(f"Detected earnings date column '{col}' -> '{earnings_col}'")
+            return df.rename(columns={col: earnings_col})
+
+    return df
+
+
 def process_stock_data(file_path, csv_path=None):
     """
     Read Excel file and add reverse index to each ticker's data.
@@ -107,6 +157,7 @@ def process_stock_data(file_path, csv_path=None):
     """
     print("Reading Excel file...")
     df = pd.read_excel(file_path)
+    df = rename_earnings_date_column(df)
     print(f"Total rows: {len(df)}")
     print(f"Columns: {list(df.columns)}")
 

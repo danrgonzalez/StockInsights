@@ -57,6 +57,13 @@ def load_data(file_path):
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors="coerce")
 
+        # Parse the quarterly earnings report date as a datetime
+        earnings_date_col = Column.EARNINGS_DATE.value
+        if earnings_date_col in df.columns:
+            df[earnings_date_col] = pd.to_datetime(
+                df[earnings_date_col], errors="coerce"
+            )
+
         # Clean and normalize ticker symbols to prevent duplicates
         ticker_col = Column.TICKER.value
         report_col = Column.REPORT.value

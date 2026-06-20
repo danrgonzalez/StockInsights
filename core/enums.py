@@ -189,6 +189,7 @@ class Column(str, Enum):
     TICKER = "Ticker"
     REPORT = "Report"
     INDEX = "Index"
+    EARNINGS_DATE = "EarningsDate"
     SECTOR = "Sector"
     INDUSTRY = "Industry"
     SUB_INDUSTRY = "Sub_Industry"

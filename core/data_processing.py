@@ -39,6 +39,13 @@ def load_stock_data(file_path: str) -> pd.DataFrame | None:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors="coerce")
 
+        # Parse the quarterly earnings report date as a datetime
+        earnings_date_col = Column.EARNINGS_DATE.value
+        if earnings_date_col in df.columns:
+            df[earnings_date_col] = pd.to_datetime(
+                df[earnings_date_col], errors="coerce"
+            )
+
         # Clean and normalize ticker symbols
         ticker_col = Column.TICKER.value
         if ticker_col in df.columns:

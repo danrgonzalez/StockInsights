@@ -196,6 +196,78 @@ info message.
 
 ---
 
+## Local environment — git tooling
+
+Machine-level issues, not repo issues. They blocked the 2026-09-02 push to origin and
+will keep causing trouble until fixed.
+
+### 23. A 2015 git shadows the modern one on PATH  *(root cause of 24)*
+`/etc/paths` lists `/usr/local/bin` before `/usr/bin`, so:
+
+| Path | Version |
+|------|---------|
+| `/usr/local/bin/git` | **2.6.4 (2015)** — wins |
+| `/usr/bin/git` | 2.50.1 (Apple Git-155) |
+| `/usr/local/git/bin/git` | 2.6.4 — old standalone Git-for-Mac installer |
+| `~/opt/homebrew/bin/git` | 2.43.2 |
+
+2.6.4 also lacks `git remote get-url` and `git config --show-origin`, and Streamlit
+warns about it at startup ("requires Git 2.7.0 or later").
+
+- [ ] Reorder `/etc/paths` so `/usr/bin` precedes `/usr/local/bin`, or remove the
+      stale 2.6.4 installs (`/usr/local/bin/git`, `/usr/local/git/`).
+
+### 24. `credential.helper` appears broken but is not
+`~/.gitconfig` contains:
+
+```
+[credential]
+	helper = osxkeychain
+	helper =
+	helper = /usr/local/share/gcm-core/git-credential-manager-core
+```
+
+The empty middle value is the **correct, documented idiom** for resetting the helper
+list (git >= 2.9) so only gcm-core applies. Git 2.6.4 predates that behaviour and tries
+to execute a helper named `""`, producing:
+
+```
+git: 'credential-' is not a git command
+```
+
+So the config is right and the git is wrong. **Do not "fix" the config** — fixing
+item 23 makes this disappear. gcm-core itself works (v2.0.632).
+
+- [ ] No action beyond item 23. Re-verify once PATH is fixed.
+
+### 25. SSH key is not registered with GitHub
+`~/.ssh/id_rsa.pub` exists (RSA 4096, `SHA256:7WdzGyVzN/jvq5PRPv92+NcpvVEijeTiW41e56hm5ss`)
+but `ssh -T git@github.com` returns `Permission denied (publickey)`. Auth currently
+works only via `gh` over https.
+
+- [ ] Add the key at https://github.com/settings/keys, or drop the idea and stay on
+      https via `gh`.
+
+### 26. `gh` is not registered as git's credential helper
+`gh` is authenticated (as `danrgonzalez`), but git cannot reach that token on its own —
+the 2026-09-02 push needed an explicit one-off override:
+
+```bash
+/usr/bin/git -c credential.helper= -c credential.helper='!gh auth git-credential' \
+    push origin main
+```
+
+- [ ] Run `gh auth setup-git` for a permanent fix (after item 23), so a plain
+      `git push` works.
+
+### 27. `gh` CLI is three years old
+Version 2.5.1 (2022-02-15). Its token had silently expired, which is what surfaced all
+of the above.
+
+- [ ] Upgrade (`brew upgrade gh`).
+
+---
+
 ## Done — 2026-09-02
 
 - [x] Fixed 7 `Report` label typos (AMZN `!2'26`, F/KO/MRK year rollovers, MMM
@@ -210,6 +282,8 @@ info message.
 - [x] `keep="first"` -> `keep="last"` in both loaders, so a corrected duplicate wins.
 - [x] Made `indexer.py` earnings-date detection content-based, so a named
       "Earnings Report Date" column survives as `EarningsDate`.
+- [x] Pushed 12 commits to origin, taking the public repo from `d84ef38`
+      (2025-09-17) to current. Needed a one-off credential override, see item 26.
 - [x] Documented the `stockinsights` conda env requirement in readme.md — system
       python has streamlit 1.45.1, the app needs >=1.49, and the server returns
       HTTP 200 even when the app would crash on open.

@@ -86,7 +86,7 @@ def load_data(file_path):
         # Check for and warn about duplicate tickers after cleaning
         if ticker_col in df.columns:
             original_count = len(df)
-            df_clean = df.drop_duplicates(subset=[ticker_col, report_col], keep="first")
+            df_clean = df.drop_duplicates(subset=[ticker_col, report_col], keep="last")
             dropped_count = original_count - len(df_clean)
             if dropped_count > 0:
                 st.warning(
@@ -94,6 +94,14 @@ def load_data(file_path):
                     "combinations during data cleaning"
                 )
                 df = df_clean
+
+        # Drop tickers flagged in config/excluded_tickers.json
+        from core.exclusions import filter_excluded
+
+        df, dropped = filter_excluded(df)
+        if dropped:
+            summary = ", ".join(f"{t} ({n})" for t, n in sorted(dropped.items()))
+            st.info(f"Excluded tickers (config/excluded_tickers.json): {summary}")
 
         return df
 

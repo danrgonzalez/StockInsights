@@ -2,15 +2,24 @@
 
 ## Quick Start
 
+> **Always activate the `stockinsights` environment first.** The dashboard needs
+> `streamlit>=1.49` and will crash on an older one. See
+> [Environment Setup](#environment-setup-conda-users).
+
 ```bash
-python scripts/run_analysis.py
+source setup_env.sh            # activate stockinsights (required, every session)
+python scripts/run_analysis.py # Stage 1 (indexer) + launch dashboard
 ```
 
-Or run the dashboard directly:
+Or, if the data is already indexed, launch the dashboard directly:
 
 ```bash
+source setup_env.sh
 streamlit run dashboard/app.py
 ```
+
+**Before running:** close `data/StockData.xlsx` in Excel. An open workbook leaves a
+`~$StockData.xlsx` lock file, and Excel will overwrite pipeline changes when it saves.
 
 ---
 
@@ -194,37 +203,122 @@ source setup_env.sh
 > `python -c "import platform; print(platform.machine())"` — it should print
 > `arm64`, not `x86_64`.
 
+### Pre-flight checks
+
+```bash
+source setup_env.sh
+
+# 1. Confirm you are in the right environment - this MUST print the conda path
+python -c "import sys, streamlit; print(sys.executable); print('streamlit', streamlit.__version__)"
+#    expected: /Users/<you>/miniconda3/envs/stockinsights/bin/python
+#              streamlit 1.58.0
+
+# 2. Confirm Excel does not hold the workbook open
+ls data/ | grep '~\$' && echo "CLOSE EXCEL FIRST" || echo "ok"
+```
+
+If `sys.executable` points at a system Python (e.g. `/Library/Frameworks/...` or
+`/usr/bin/python3`), stop — see [Wrong Python environment](#wrong-python-environment).
+
 ### Option 1: Automated Workflow (Recommended)
 ```bash
+source setup_env.sh
 python scripts/run_analysis.py
 ```
 This will automatically:
-1. Run the stock indexer to process your data
+1. Run Stage 1 (`scripts/indexer.py`) to rebuild `data/StockData_Indexed.xlsx`
 2. Launch the interactive dashboard in your browser
 
 ### Option 2: Manual Step-by-Step
 ```bash
-# Step 1: Process the raw data
+source setup_env.sh
+
+# Stage 1: rebuild the indexed workbook from the raw data
 python scripts/indexer.py
 
-# Step 2: Launch the dashboard
+# Stages 2-3 + UI: the dashboard runs these on load
 streamlit run dashboard/app.py
 ```
 
-### Option 3: Using Core Library Only (No Dashboard)
+Port 8501 is the Streamlit default and may already be taken by another app.
+Pick a free port explicitly if so:
+
+```bash
+streamlit run dashboard/app.py --server.port 8502
+```
+
+Check what is holding a port with `lsof -nP -iTCP:8501 -sTCP:LISTEN`.
+
+### Option 3: Run Stages 1-3 headlessly (no dashboard)
+
+Useful for verifying the pipeline end to end without opening the UI:
+
+```bash
+source setup_env.sh
+python scripts/indexer.py          # Stage 1
+
+python - <<'EOF'
+from core import (load_stock_data, calculate_qoq_changes, calculate_sector_rankings,
+                  calculate_outperformance_ratios, calculate_downside_capture,
+                  predict_next_eps)
+
+df = load_stock_data("data/StockData_Indexed.xlsx")   # applies the exclusion list
+print("loaded          ", df.shape, df["Ticker"].nunique(), "tickers")
+
+df = calculate_qoq_changes(df);           print("stage 2         ", df.shape)
+df = calculate_sector_rankings(df);       print("stage 3a rank   ", df.shape)
+df = calculate_outperformance_ratios(df); print("stage 3b outperf", df.shape)
+df = calculate_downside_capture(df);      print("stage 3c downside", df.shape)
+
+ok = sum(predict_next_eps(df, t) is not None for t in df["Ticker"].unique())
+print("stage 3d predict", ok, "/", df["Ticker"].nunique())
+EOF
+```
+
+Expected shape progression (as of 2026-09-02): `(8456, 8)` -> `(8456, 32)` ->
+`(8456, 32)` -> `(8456, 37)` -> `(8456, 38)`, and 136/137 predictions.
+
+> `calculate_sector_rankings()` currently adds **0 columns**: it needs a `Sector`
+> column that the source data does not carry. The classifications exist in
+> `core/classifications.py` but are never joined onto the DataFrame, so sector
+> ranking is presently inert.
+
+### Option 4: Using Core Library Only
+
 ```python
 from core import load_stock_data, calculate_qoq_changes, predict_next_eps
 
-# Load and process
 df = load_stock_data("data/StockData_Indexed.xlsx")
 df = calculate_qoq_changes(df)
 
-# Analyze any ticker
 for ticker in ["AAPL", "MSFT", "GOOGL"]:
     prediction = predict_next_eps(df, ticker)
     if prediction:
         print(f"{ticker}: ${prediction['predicted_eps']:.2f} ({prediction['confidence']})")
 ```
+
+> **Note:** `predict_next_eps` reads `config/ticker_strategy_mapping.json` by a
+> path relative to the **current working directory**. Run from the repo root, or
+> the per-ticker strategy silently falls back to `weighted_growth` while still
+> reporting "backtested optimal".
+
+## Excluded Tickers
+
+`config/excluded_tickers.json` is the single source of truth for tickers with known
+data problems. Entries with `"exclude": true` are filtered out at data load, so the
+dashboard, predictions and backtests all ignore the same set.
+
+| Ticker | Status | Reason |
+|--------|--------|--------|
+| `S` | excluded | Delisted (Sprint). Last report 2019-10-25. No real earnings dates. |
+| `JWN` | excluded | Taken private. 585 days stale. No real earnings dates. |
+| `SKX` | excluded | Acquired. 403 days stale. No real earnings dates. |
+| `BRK/B` | excluded | 10 quarters missing (Q2'17-Q3'19); TTM/QoQ and Index alignment are wrong. |
+| `BABA` | watch | One suspect earnings date; financials sound, so still included. |
+| `EA` | watch | "Buyout" note in the sheet; still reporting. |
+
+To bring a ticker back, set its `"exclude"` to `false` — no re-index needed, since
+`StockData_Indexed.xlsx` still contains all 141 tickers.
 
 ## Project Structure
 
@@ -381,25 +475,76 @@ Run `python multi_ticker_backtest.py` to optimize strategies for your data.
 
 ## Troubleshooting
 
-### Common Issues
+### Wrong Python environment
 
-**File not found errors:**
-```
-ERROR: data/StockData.xlsx not found
-```
-Solution: Ensure `StockData.xlsx` is in the `data/` folder.
+**By far the most common failure.** The app requires `streamlit>=1.49` (it uses
+`width="stretch"`). A system Python with an older Streamlit crashes mid-render:
 
-**Missing dependencies:**
 ```
-ERROR: Missing required packages
+TypeError: 'str' object cannot be interpreted as an integer
+  ... in dataframe: proto.width = width
 ```
-Solution: Run `pip install -r requirements.txt`
 
-**Port already in use:**
+The Streamlit server still starts and answers on its port, so the app *looks* fine
+until you actually open it. Diagnose:
+
+```bash
+python -c "import sys, streamlit; print(sys.executable, streamlit.__version__)"
+```
+
+If that is not `.../miniconda3/envs/stockinsights/bin/python` with `1.58.0`:
+
+```bash
+source setup_env.sh
+```
+
+To confirm the whole app script runs before opening a browser:
+
+```bash
+python -c "import runpy; runpy.run_path('dashboard/app.py', run_name='__main__')" 2>&1 | tail -5
+```
+Streamlit prints "bare mode" / ScriptRunContext warnings here — those are expected.
+A traceback is not.
+
+### Excel holds the workbook open
+
+Writes to `data/StockData.xlsx` are silently lost, or clobbered when Excel next saves.
+
+```bash
+ls data/ | grep '~\$'    # a ~$StockData.xlsx lock file means it is open
+```
+Solution: close the workbook in Excel before running anything that writes it.
+
+### Port already in use
 ```
 Error: Port 8501 is already in use
 ```
-Solution: Run `streamlit run dashboard/app.py --server.port 8502`
+Solution: `streamlit run dashboard/app.py --server.port 8502`.
+Check the occupant first with `lsof -nP -iTCP:8501 -sTCP:LISTEN` — it may be a
+different project you do not want to kill.
+
+### A ticker shows no EPS prediction
+
+Expected for companies whose EPS crosses zero repeatedly (e.g. `INTC`): every
+quarter-over-quarter growth exceeds the +/-200% outlier filter, leaving the strategy
+with nothing to fit. The dashboard shows an info message rather than failing.
+
+### A ticker is missing entirely
+
+Check `config/excluded_tickers.json` — see [Excluded Tickers](#excluded-tickers).
+The dashboard also prints an `st.info` naming everything it dropped at load.
+
+### File not found errors
+```
+ERROR: data/StockData.xlsx not found
+```
+Solution: ensure `StockData.xlsx` is in the `data/` folder, and run from the repo root.
+
+### Missing dependencies
+```
+ERROR: Missing required packages
+```
+Solution: `source setup_env.sh` first; if still missing, `pip install -r requirements.txt`.
 
 ## Updating Data
 

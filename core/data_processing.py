@@ -63,9 +63,14 @@ def load_stock_data(file_path: str) -> pd.DataFrame | None:
                 df[col] = df[col].astype(str).str.strip()
                 df[col] = df[col].replace("", np.nan)
 
-        # Remove duplicates
+        # Remove duplicates - keep the newest row when a label is repeated
         if ticker_col in df.columns:
-            df = df.drop_duplicates(subset=[ticker_col, report_col], keep="first")
+            df = df.drop_duplicates(subset=[ticker_col, report_col], keep="last")
+
+        # Drop tickers flagged in config/excluded_tickers.json
+        from core.exclusions import filter_excluded
+
+        df, _ = filter_excluded(df)
 
         return df
     except FileNotFoundError:

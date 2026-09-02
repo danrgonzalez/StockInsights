@@ -122,8 +122,12 @@ def rename_earnings_date_column(df):
     if earnings_col in df.columns:
         return df
 
+    # Candidates: unnamed columns, plus any header that looks like a date field.
+    # The column is sometimes headerless and sometimes given a name such as
+    # "Earnings Report Date", so match on content rather than on the header.
+    known_cols = {"Ticker", "Report", "EPS", "Revenue", "Price", "DivAmt", "Index"}
     for col in df.columns:
-        if "Unnamed:" not in str(col):
+        if col in known_cols:
             continue
 
         non_null = df[col].dropna()

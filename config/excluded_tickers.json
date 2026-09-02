@@ -1,0 +1,36 @@
+{
+  "_comment": "Single source of truth for tickers with known data-quality problems. Entries with exclude=true are filtered out at data load, so the dashboard, predictions and backtests all ignore them consistently. Set exclude=false to bring one back once its issue is resolved.",
+  "_updated": "2026-09-02",
+  "tickers": {
+    "S": {
+      "exclude": true,
+      "reason": "Delisted (Sprint/T-Mobile merger). Last report 2019-10-25, 2503 days behind the leading edge. No real earnings dates.",
+      "resolution": "Drop permanently, or keep excluded as historical-only."
+    },
+    "JWN": {
+      "exclude": true,
+      "reason": "Taken private. Last report 2025-01-24, 585 days behind the leading edge. No real earnings dates; all 56 are low-confidence estimates.",
+      "resolution": "Drop permanently, or keep excluded as historical-only."
+    },
+    "SKX": {
+      "exclude": true,
+      "reason": "Acquired. Last report 2025-07-25, 403 days behind the leading edge. No real earnings dates; all 58 are low-confidence estimates.",
+      "resolution": "Drop permanently, or keep excluded as historical-only."
+    },
+    "BRK/B": {
+      "exclude": true,
+      "reason": "10 quarters missing from the source data (Q2'17-Q3'19). Rows are treated as consecutive, so TTM and QoQ silently bridge a 2.5-year hole and Index alignment is off by 10 quarters vs every other ticker.",
+      "resolution": "Backfill the 10 missing quarters, then set exclude=false. Do NOT relabel the Report column to close the gap - the existing labels are correct."
+    },
+    "BABA": {
+      "exclude": false,
+      "reason": "WATCH ONLY - not excluded. One suspect earnings date: rows 783-784 are 55 days apart (2026-03-19 -> 2026-05-13) where every other spacing in the file is 84-112. Financial data (EPS/Revenue/Price) is sound, so analysis is unaffected.",
+      "resolution": "Confirm whether 2026-03-19 should be ~2026-02-19."
+    },
+    "EA": {
+      "exclude": false,
+      "reason": "WATCH ONLY - not excluded. Sheet carries a 'Buyout' note at Q2'26. Data is current, but the ticker will stop reporting.",
+      "resolution": "Exclude once it stops reporting."
+    }
+  }
+}

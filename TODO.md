@@ -55,13 +55,36 @@ within two weeks. Long-range extrapolation is structurally sound but unverifiabl
 Machine-level issues, not repo issues. They blocked the 2026-09-02 push to origin and
 will keep causing trouble until fixed.
 
-### 25. SSH key is not registered with GitHub
-`~/.ssh/id_rsa.pub` exists (RSA 4096, `SHA256:7WdzGyVzN/jvq5PRPv92+NcpvVEijeTiW41e56hm5ss`)
-but `ssh -T git@github.com` returns `Permission denied (publickey)`. Auth currently
-works only via `gh` over https.
+### 25. SSH key is not registered with GitHub — needs one action from you
+Re-checked 2026-09-05. Diagnosis confirmed and narrowed: the private key
+`~/.ssh/id_rsa` (RSA 4096, created 2017-04-11,
+`SHA256:7WdzGyVzN/jvq5PRPv92+NcpvVEijeTiW41e56hm5ss`) **is** loaded and offered to
+GitHub — `ssh -v` shows it — and GitHub rejects it, so nothing is wrong with the key
+or the ssh setup. It simply is not on the account. RSA-4096 is still accepted by
+GitHub (only DSA and unsigned RSA-SHA1 were removed), so this key would work as-is.
 
-- [ ] Add the key at https://github.com/settings/keys, or drop the idea and stay on
-      https via `gh`.
+**This is now optional, not blocking.** Item 26 registered `gh` as git's credential
+helper, so a plain `git push` works over https; SSH would only matter if the remote
+were switched to `git@github.com:`. The remote is currently
+`https://github.com/danrgonzalez/StockInsights.git`.
+
+I cannot complete this: adding a key needs the `admin:public_key` scope, and the
+token has only `gist`, `read:org`, `repo`, `workflow`. Granting it needs an
+interactive browser flow.
+
+Pick one:
+- [ ] **Paste it** (fastest). The key is already on your clipboard; add it at
+      https://github.com/settings/keys. Then verify with
+      `ssh -T git@github.com` — expect "Hi danrgonzalez! You've successfully
+      authenticated".
+- [ ] **Let gh do it.** Run `gh auth refresh -h github.com -s admin:public_key`
+      yourself, then I can run `gh ssh-key add ~/.ssh/id_rsa.pub`.
+- [ ] **Drop it** and stay on https via `gh`, which works today. If so, delete this
+      item.
+
+Worth considering either way: the key is 9 years old and RSA. `ssh-keygen -t ed25519`
+would be the modern replacement, but that is a new credential, so I have not created
+one unasked.
 
 ---
 

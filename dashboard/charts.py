@@ -245,12 +245,16 @@ def create_qoq_chart(df, ticker, metric, title, height=240):
         marker=dict(
             color=clean_data[qoq_column],
             colorscale=["red", "green"],
-            cmin=-abs(clean_data[qoq_column]).max()
-            if not clean_data[qoq_column].empty
-            else 0,
-            cmax=abs(clean_data[qoq_column]).max()
-            if not clean_data[qoq_column].empty
-            else 0,
+            cmin=(
+                -abs(clean_data[qoq_column]).max()
+                if not clean_data[qoq_column].empty
+                else 0
+            ),
+            cmax=(
+                abs(clean_data[qoq_column]).max()
+                if not clean_data[qoq_column].empty
+                else 0
+            ),
         ),
         selector=dict(mode="lines+markers"),
     )

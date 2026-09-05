@@ -432,9 +432,9 @@ def calculate_outperformance_ratios(df: pd.DataFrame) -> pd.DataFrame:
                     sector_outperf = (
                         df_with_outperf.loc[sector_mask, metric] / sector_avg
                     ) * 100
-                    df_with_outperf.loc[
-                        sector_mask, sector_outperf_col
-                    ] = sector_outperf
+                    df_with_outperf.loc[sector_mask, sector_outperf_col] = (
+                        sector_outperf
+                    )
 
     return df_with_outperf
 

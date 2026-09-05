@@ -1196,9 +1196,9 @@ def main():
                                 col_name = f"{metric}_{period}_Avg"
                                 if col_name in sector_data.columns:
                                     avg_value = sector_data[col_name].mean()
-                                    sector_summary[
-                                        f"{metric}_{period}_Sector_Avg"
-                                    ] = avg_value
+                                    sector_summary[f"{metric}_{period}_Sector_Avg"] = (
+                                        avg_value
+                                    )
 
                         sector_stats.append(sector_summary)
 
@@ -1398,20 +1398,17 @@ def main():
         st.header("📚 Methodology & Calculations")
         st.markdown("---")
 
-        st.markdown(
-            """
+        st.markdown("""
         This section explains how each metric is calculated using **AAPL** as our
         example ticker.
         All calculations are performed on a per-ticker basis using quarterly data.
-        """
-        )
+        """)
 
         # Core Metrics Section
         st.subheader("🔢 Core Metrics")
 
         with st.expander("**EPS TTM**", expanded=False):
-            st.markdown(
-                """
+            st.markdown("""
             **Formula**: `EPS_TTM = Sum of last 4 quarters of EPS`
 
             **Example (AAPL)**:
@@ -1423,12 +1420,10 @@ def main():
 
             **Purpose**: Shows annualized earnings performance, smoothing out quarterly
             volatility.
-            """
-            )
+            """)
 
         with st.expander("**P/E Multiple**", expanded=False):
-            st.markdown(
-                """
+            st.markdown("""
             **Formula**: `Multiple = Price / EPS_TTM`
 
             **Example (AAPL)**:
@@ -1438,12 +1433,10 @@ def main():
 
             **Purpose**: Shows how much investors pay for each dollar of earnings.
             Lower is generally better value.
-            """
-            )
+            """)
 
         with st.expander("**Dividend Yield (Quarterly & Annual)**", expanded=False):
-            st.markdown(
-                """
+            st.markdown("""
             **Quarterly Formula**: `DivYield = (DivAmt / Price) × 100`
             **Annual Formula**: `DivYieldAnnual = (DivAmt × 4 / Price) × 100`
 
@@ -1459,15 +1452,13 @@ def main():
 
             **Purpose**: Shows income return as percentage of stock price.
             Annual yield is standard for investment comparison.
-            """
-            )
+            """)
 
         # Advanced Metrics Section
         st.subheader("📊 Advanced Financial Metrics")
 
         with st.expander("**Payout Ratio**", expanded=False):
-            st.markdown(
-                """
+            st.markdown("""
             **Formula**: `PayoutRatio = (Annual Dividends / EPS_TTM) × 100`
 
             **Example (AAPL)**:
@@ -1478,12 +1469,10 @@ def main():
 
             **Purpose**: Shows what percentage of earnings are paid as dividends.
             Higher ratios may indicate less retained earnings for growth.
-            """
-            )
+            """)
 
         with st.expander("**PEG Ratio**", expanded=False):
-            st.markdown(
-                """
+            st.markdown("""
             **Formula**: `PEG = P/E Multiple / Annual EPS Growth Rate`
 
             **Calculation Steps**:
@@ -1499,12 +1488,10 @@ def main():
 
             **Purpose**: PEG < 1.0 suggests stock may be undervalued relative to
             growth. Lower is better.
-            """
-            )
+            """)
 
         with st.expander("**PEGY Ratio**", expanded=False):
-            st.markdown(
-                """
+            st.markdown("""
             **Formula**: `PEGY = PEG Ratio / Annual Dividend Yield`
 
             **Example (AAPL)**:
@@ -1517,15 +1504,13 @@ def main():
 
             **Purpose**: Incorporates dividend income into growth valuation.
             Lower values suggest better value when considering both growth and income.
-            """
-            )
+            """)
 
         # Momentum & Quality Metrics
         st.subheader("🚀 Momentum & Quality Metrics")
 
         with st.expander("**EPS Growth Momentum**", expanded=False):
-            st.markdown(
-                """
+            st.markdown("""
             **Formula**: `EPSMomentum = EPS_4Q_Rolling_Avg - EPS_8Q_Rolling_Avg`
 
             **Example (AAPL)**:
@@ -1539,12 +1524,10 @@ def main():
 
             **Purpose**: Identifies whether earnings growth is accelerating or
             slowing down.
-            """
-            )
+            """)
 
         with st.expander("**Price Volatility**", expanded=False):
-            st.markdown(
-                """
+            st.markdown("""
             **Formula**: `PriceVolatility = Standard Deviation of Price_QoQ over
             8 quarters`
 
@@ -1554,12 +1537,10 @@ def main():
 
             **Purpose**: Higher values indicate more volatile stock price movements.
             Risk measure.
-            """
-            )
+            """)
 
         with st.expander("**Revenue Consistency**", expanded=False):
-            st.markdown(
-                """
+            st.markdown("""
             **Formula**: `RevenueConsistency = 100 - (Coefficient of Variation × 100)`
 
             **Where**: `Coefficient of Variation = Standard Deviation / |Mean|`
@@ -1571,12 +1552,10 @@ def main():
 
             **Purpose**: Higher scores indicate more consistent revenue growth.
             Quality measure.
-            """
-            )
+            """)
 
         with st.expander("**Dividend Growth Rate**", expanded=False):
-            st.markdown(
-                """
+            st.markdown("""
             **Enhanced Methodology**: Tracks actual dividend progression over time,
             not just QoQ fluctuations
 
@@ -1608,15 +1587,13 @@ def main():
 
             **Purpose**: More accurate assessment of dividend growth by focusing on
             actual progression rather than quarterly noise.
-            """
-            )
+            """)
 
         # Relative Performance Metrics
         st.subheader("📈 Relative Performance Metrics")
 
         with st.expander("**Sector Rankings**", expanded=False):
-            st.markdown(
-                """
+            st.markdown("""
             **Methodology**: Each ticker is ranked within its sector for key metrics
 
             **Ranking Logic**:
@@ -1630,12 +1607,10 @@ def main():
 
             **Purpose**: Shows relative performance within peer group.
             Rank 1 = best in sector.
-            """
-            )
+            """)
 
         with st.expander("**Outperformance Ratios**", expanded=False):
-            st.markdown(
-                """
+            st.markdown("""
             **Formula**: `Outperformance = (Ticker Metric / Benchmark Average) × 100`
 
             **Benchmarks**:
@@ -1651,12 +1626,10 @@ def main():
 
             **Purpose**: Values >100% indicate outperformance. Shows relative
             strength vs benchmarks.
-            """
-            )
+            """)
 
         with st.expander("**Downside Capture**", expanded=False):
-            st.markdown(
-                """
+            st.markdown("""
             **Formula**: `DownsideCapture = (Avg Ticker Return in Down Markets /
             Avg Market Return in Down Markets) × 100`
 
@@ -1678,15 +1651,13 @@ def main():
             - **>100%**: Stock falls more than market (aggressive)
 
             **Purpose**: Risk measure. Lower values indicate better downside protection.
-            """
-            )
+            """)
 
         # QoQ Rolling Averages
         st.subheader("📊 Quarter-over-Quarter (QoQ) Analysis")
 
         with st.expander("**QoQ Calculations & Rolling Averages**", expanded=False):
-            st.markdown(
-                """
+            st.markdown("""
             **QoQ Formula**: `QoQ_Change = ((Current_Quarter - Previous_Quarter) /
             Previous_Quarter) × 100`
 
@@ -1705,14 +1676,12 @@ def main():
 
             **Purpose**: Smooths volatility and shows trends. Longer periods provide
             more stable indicators.
-            """
-            )
+            """)
 
         # Data Notes
         st.subheader("📝 Important Notes")
 
-        st.info(
-            """
+        st.info("""
         **Data Requirements**:
         - Minimum 4 quarters needed for TTM calculations
         - Minimum 8 quarters needed for EPS Momentum
@@ -1727,8 +1696,7 @@ def main():
         - All calculations based on quarterly reporting data
         - Metrics updated each quarter as new data becomes available
         - Rolling averages provide smoothed trend indicators
-        """
-        )
+        """)
 
         st.success(
             "💡 **Pro Tip**: Use multiple metrics together for comprehensive "

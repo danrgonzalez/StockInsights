@@ -174,13 +174,14 @@ def process_stock_data(file_path, csv_path=None):
 
     max_records_per_ticker = df.groupby("Ticker").size().max()
 
-    def add_ticker_index(group):
-        n_records = len(group)
-        start_index = max_records_per_ticker - n_records + 1
-        end_index = max_records_per_ticker + 1
-        return pd.Series(range(start_index, end_index), index=group.index)
-
-    df["Index"] = df.groupby("Ticker", sort=False).apply(add_ticker_index).values
+    # Each ticker's rows are numbered so that its last row lands on
+    # max_records_per_ticker. cumcount/transform are positional per row, so this
+    # stays correct even when a ticker's rows are not contiguous in the frame.
+    ticker_groups = df.groupby("Ticker", sort=False)
+    records_per_row = ticker_groups["Ticker"].transform("size")
+    df["Index"] = (
+        ticker_groups.cumcount() + max_records_per_ticker - records_per_row + 1
+    )
 
     # Update latest Price values with SimpleMovingAvg if available
     if sma_mapping and "Price" in df.columns:

@@ -1148,4 +1148,4 @@ if __name__ == "__main__":
         industry=Industry.TECHNOLOGY_HARDWARE_STORAGE_PERIPHERALS,
         sub_industry=SubIndustry.TECHNOLOGY_HARDWARE_STORAGE_PERIPHERALS,
     )
-    print("Validated stock info: {}".format(stock_info.dict()))
+    print("Validated stock info: {}".format(stock_info.model_dump()))

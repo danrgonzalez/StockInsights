@@ -55,25 +55,6 @@ zero, which is normal. Dataset-wide: median **-318**, p05 **-3,348**, min
 
 ## P2 — Correctness bugs
 
-### 5. Backtest ranking prints wrong ranks
-`core/backtesting.py:257` — `rank = idx + 1` uses the pre-sort DataFrame index. For
-AAPL the five sorted strategies print as ranks `1, 2, 5, 3, 4`.
-
-- [ ] Use `enumerate` over the sorted frame.
-
-### 6. Division by zero on an empty ticker set
-`core/backtesting.py:406` — `successful_tests / total * 100`.
-
-- [ ] Guard `total == 0`.
-
-### 7. Indexer assigns the Index column positionally
-`scripts/indexer.py:167` — `df.groupby("Ticker", sort=False).apply(...).values` is
-correct only because the source keeps each ticker's rows contiguous (141 runs /
-141 tickers). Reproduced garbage on a non-contiguous frame (`A -> 1,3,3`, `B -> 2,2`).
-Also raises a pandas deprecation warning.
-
-- [ ] Rewrite with `groupby(...).cumcount()`.
-
 ### 8. Sector ranking is dead code
 `calculate_sector_rankings` returns immediately without a `Sector` column, and the
 data has none — confirmed live: it adds **0 columns**. The sector half of
@@ -83,6 +64,56 @@ classifications are simply never joined onto the DataFrame.
 
 - [ ] Join sector/industry onto `df` in `dashboard/app.py:main()` (one line), or
       remove the feature and its Methodology entry.
+
+### 28. "Latest" values silently reach back through blank quarters
+`dropna().iloc[-1]` — 11 occurrences in `dashboard/ui_components.py`, plus
+`dashboard/app.py:998` and `:1006` — takes the last *non-null* value, not the value
+for the latest quarter. When a company stops paying a dividend the card keeps
+displaying the last one it ever paid, with no indication of age.
+
+Nine tickers carry a latest value more than one quarter stale:
+
+| Ticker | Stale metrics | Quarters behind |
+|--------|---------------|-----------------|
+| `DAL`, `LUV`, `EXPE` | DivAmt, DivYield, DivYieldAnnual, PayoutRatio, PEGYRatio | 25-26 |
+| `AAL`, `BA`, `MGM` | PEGYRatio | 14-26 |
+| `INTC`, `GPRO` | PEGYRatio / EPSMomentum | 7 |
+| `PVH` | dividend metrics | 2 |
+
+`DAL` is the clearest case: its latest row is `Q2'26` with a null `DivAmt`, but the
+card displays **$0.4025**, the dividend it paid in `Q4'19` (reported 2020-01-09).
+Dividends were suspended in the pandemic and, for these tickers, never resumed in the
+data.
+
+- [ ] Read the latest value from the latest row, or carry the source quarter with the
+      value and label it when it is not current.
+
+### 29. Sector rank and outperformance compare against every historical row
+Amends item 8 — its one-line fix is not sufficient on its own.
+
+`core/data_processing.py:370` ranks within a sector mask that spans **all quarters of
+all tickers**, not one row per ticker. Joining a `Sector` column as item 8 proposes
+makes the feature run, but it then produces ranks like AAPL `Multiple` = **957** and a
+`Multiple_SectorRank` max of **2,115** across 137 tickers. Read as "rank in sector",
+that is meaningless.
+
+`calculate_outperformance_ratios` has the same denominator problem and, unlike the
+sector half, it **already runs**: `core/data_processing.py:413` divides by
+`df[metric].mean()` over every row in the panel. For `Revenue_TTM` that mean is
+**51,927** against **79,613** for one-row-per-ticker — a 1.53x gap — and it is
+row-weighted, so a ticker with 60 quarters of history pulls the benchmark harder than
+one with 20. `dashboard/app.py:1636-1650` documents this to the user as "vs. all
+tickers average" with a peer-comparison example, which is not what the code computes.
+
+Neither result is currently displayed, so nothing on screen is wrong today. Both
+would be as soon as the feature is wired up.
+
+- [ ] Rank and benchmark one row per ticker (its latest quarter), not every historical
+      row — see `attach_peer_comparison` in `scripts/export_dashboard_data.py` for a
+      working version.
+- [ ] Exclude non-positive `Multiple`/`PEG`/`PEGY` from valuation ranks (overlaps
+      item 2) and compare percent-unit metrics as a difference in percentage points,
+      not as a ratio to a near-zero average.
 
 ---
 
@@ -113,23 +144,46 @@ mapping. Measured cost is negligible; the duplication is the problem.
 
 - [ ] Compute once in `app.py` and pass into the chart functions.
 
-### 13. Deprecated Pydantic v1 API
-`core/classifications.py:1150` uses `stock_info.dict()` under the pinned pydantic 2.11.7.
-
-- [ ] Switch to `.model_dump()`.
-
-### 14. Pre-commit pins ~2 years behind `requirements-dev.txt`
-black 23.7 vs `>=25.1`, flake8 6.0 vs `>=7.3`, isort 5.12 vs `>=6.0` — hooks and a
-local run disagree.
-
-- [ ] Align `.pre-commit-config.yaml` with `requirements-dev.txt`.
-
 ### 15. Repo hygiene
 - [ ] `.claude/settings.local.json` is tracked but is a local file.
 - [ ] `data/` is entirely untracked (`.gitignore` excludes `*.xlsx`/`*.csv`), so the
       repo cannot run from a fresh clone **and the spreadsheet fixes made on
       2026-09-02 are not under version control**. Decide on a data strategy.
 - [ ] `setup_env.sh` hardcodes `/Users/dgonzalez/miniconda3`.
+
+### 30. The Rolling Averages tab lists four metrics that can never have values
+`dashboard/app.py:947` asks for rolling averages of `PEGRatio`, `EPSMomentum`,
+`PriceVolatility` and `RevenueConsistency`, but `DerivedMetric.qoq_metrics()`
+(`core/enums.py`) never computes a `_QoQ` series for any of them. All four fall
+through to the `np.nan` branch, so the table carries **12 permanently blank columns**
+(4 metrics x 4Q/8Q/12Q). The same four appear in the tab-1 QoQ summary at
+`dashboard/app.py:390`, where they are silently skipped instead.
+
+`Multiple` has the opposite problem: `Multiple_QoQ` is computed and charted, but the
+metric is absent from the tab-3 list.
+
+- [ ] Drop the four metrics from both lists, or add them to `qoq_metrics()` if a QoQ
+      of a ratio is actually wanted. Add `Multiple` to the tab-3 list.
+
+### 31. Small data-model defects
+Each is minor on its own; all three mislead a reader who trusts the column name.
+
+- **Sidebar date range sorts labels as strings.** `dashboard/app.py:112` uses
+  `df['Report'].min()/.max()` on labels shaped `Q3'25`, which orders by quarter before
+  year — `Q1'26` sorts below `Q4'10`. It currently displays **"Q1'10 to Q4'26"** when
+  the data actually reaches **Q2'27** (fiscal-year-ahead tickers: NVDA, CRM, WMT,
+  ADSK, TJX, WDAY).
+- **`DivYieldAnnual_QoQ` duplicates `DivYield_QoQ`.** Annual yield is quarterly x 4, so
+  the percent change is identical — verified equal on all 4,813 rows where both exist.
+  One of the two columns is noise.
+- **`DivGrowthRate` returns `0.0` to mean "unknown".** `core/data_processing.py:334`
+  sets 0.0 when a ticker has fewer than two detected dividend changes, which is
+  indistinguishable from a real zero-growth dividend. Three tickers are affected, one
+  of which (`EA`) is a current payer reported as having 0% dividend growth.
+
+- [ ] Sort `Report` by `(year, quarter)` for the sidebar range.
+- [ ] Drop one of the duplicate dividend-yield QoQ columns.
+- [ ] Return `NaN`, not `0.0`, when dividend growth cannot be measured.
 
 ---
 
@@ -265,6 +319,46 @@ Version 2.5.1 (2022-02-15). Its token had silently expired, which is what surfac
 of the above.
 
 - [ ] Upgrade (`brew upgrade gh`).
+
+---
+
+## Done — 2026-09-05
+
+- [x] **Item 5** — backtest ranking printed the pre-sort DataFrame index as the rank
+      (`rank = idx + 1`). Now `enumerate` over the sorted frame. AAPL reproduced the
+      documented `1,2,5,3,4` (its sorted frame carries index order `[0,1,4,2,3]`) and
+      now prints `1,2,3,4,5`. Scope was wider than recorded: **94 of 137 tickers**
+      sort non-monotonically and so printed wrong ranks.
+- [x] **Item 6** — guarded `successful_tests / total` in `run_multi_ticker_backtest`;
+      an empty ticker set now prints "Success rate: n/a (no tickers tested)".
+- [x] **Item 7** — `scripts/indexer.py` builds `Index` from
+      `groupby.cumcount() + max_records - transform("size") + 1`. Reproduces the
+      existing 8,656-row `Index` column exactly, is correct on a non-contiguous frame
+      (old: `1,2,3,2,3`; new: `1,2,2,3,3`), and no longer raises the pandas
+      `DataFrameGroupBy.apply` deprecation warning.
+- [x] **Item 13** — `stock_info.dict()` -> `.model_dump()` in `core/classifications.py`.
+- [x] **Item 14** — `.pre-commit-config.yaml` pinned to the versions actually installed
+      in the `stockinsights` env: black 26.5.1, isort 8.0.1, flake8 7.3.0,
+      autoflake v2.3.3, pre-commit-hooks v6.0.0. black 26 then reformatted 4 files
+      (148 lines, conditional-expression parenthesization only — ASTs verified
+      identical before/after). The bump also exposed the reason the hooks had gone
+      stale: `.git/hooks/pre-commit` was wired to a homebrew python 3.9, and black 26
+      needs >= 3.10, so the first commit attempt died with "Package 'black' requires a
+      different Python". Added `default_language_version: python: python3.11` to the
+      config and reinstalled the hook from the `stockinsights` env. All 10 hooks now
+      pass on `pre-commit run --all-files`.
+
+- [x] Added `scripts/export_dashboard_data.py`: runs the dashboard pipeline headlessly
+      and writes `data/exports/` — a self-describing JSON bundle (metadata, data
+      dictionary, per-ticker snapshot, sector aggregates) plus three CSVs. Documented
+      as readme Option 5.
+- [x] The exporter works around items 1, 2 and 8 for its own output only — it `chdir`s
+      to the repo root so the strategy mapping always loads, joins the classifications
+      onto the frame, excludes non-positive valuations from peer ranks, and flags
+      stale values per ticker. **None of these are fixed in `core/`**; the items stay
+      open.
+- [x] Surfaced items 28-31 while validating the exported numbers against the raw
+      workbook.
 
 ---
 

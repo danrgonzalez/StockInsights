@@ -238,12 +238,16 @@ def analyze_backtest_results(results):
                 "Within 10%": result["predictions_within_10pct"],
                 "Within 20%": result["predictions_within_20pct"],
                 "Total Predictions": n_pred,
-                "Success Rate 10%": (result["predictions_within_10pct"] / n_pred * 100)
-                if n_pred > 0
-                else 0,
-                "Success Rate 20%": (result["predictions_within_20pct"] / n_pred * 100)
-                if n_pred > 0
-                else 0,
+                "Success Rate 10%": (
+                    (result["predictions_within_10pct"] / n_pred * 100)
+                    if n_pred > 0
+                    else 0
+                ),
+                "Success Rate 20%": (
+                    (result["predictions_within_20pct"] / n_pred * 100)
+                    if n_pred > 0
+                    else 0
+                ),
             }
         )
 
@@ -290,9 +294,7 @@ def print_detailed_comparison(results):
     print("STRATEGY PERFORMANCE RANKING")
     print("=" * 80)
 
-    for idx, row in comparison_df.iterrows():
-        rank = idx + 1
-
+    for rank, (_, row) in enumerate(comparison_df.iterrows(), start=1):
         print(f"\n{rank}. {row['Strategy'].upper()}")
         print(f"   Accuracy Score: {row['Accuracy Score']:.1f} (lower is better)")
         mean_err = row["Mean % Error"]
@@ -403,7 +405,10 @@ def run_multi_ticker_backtest(
     print(f"Successful tests: {successful_tests}")
     print(f"Failed tests: {failed_tests}")
     total = successful_tests + failed_tests
-    print(f"Success rate: {(successful_tests / total * 100):.1f}%")
+    if total:
+        print(f"Success rate: {(successful_tests / total * 100):.1f}%")
+    else:
+        print("Success rate: n/a (no tickers tested)")
 
     return ticker_results, ticker_best_strategies
 

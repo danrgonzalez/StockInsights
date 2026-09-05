@@ -1,8 +1,46 @@
+import re
+
 import plotly.express as px
 import plotly.graph_objects as go
 
 from core.enums import ChartDefaults, DerivedMetric, RollingWindow
 from dashboard.data_utils import predict_next_eps
+
+
+def _report_ticks(data, extra_index=None, extra_label=None):
+    """Map each row's Index to its fiscal-quarter Report label (e.g. "Q1'26")
+    so charts can keep Index as the plotted x-axis while showing quarter/year
+    tick labels instead of raw integers.
+    """
+    ticks = (
+        data[["Index", "Report"]]
+        .dropna()
+        .drop_duplicates(subset=["Index"])
+        .sort_values("Index")
+    )
+    tickvals = ticks["Index"].tolist()
+    ticktext = ticks["Report"].tolist()
+    if (
+        extra_index is not None
+        and extra_label is not None
+        and extra_index not in tickvals
+    ):
+        tickvals.append(extra_index)
+        ticktext.append(extra_label)
+    return tickvals, ticktext
+
+
+def _next_quarter_label(report):
+    """Given a fiscal-quarter label like "Q4'25", return the next quarter's
+    label ("Q1'26"). Returns None if the label doesn't parse.
+    """
+    match = re.match(r"Q(\d)'(\d+)", str(report).strip())
+    if not match:
+        return None
+    quarter, year = int(match.group(1)), int(match.group(2))
+    if quarter == 4:
+        return f"Q1'{(year + 1) % 100:02d}"
+    return f"Q{quarter + 1}'{year:02d}"
 
 
 def create_metric_chart(df, ticker, metric, title, height=400):
@@ -70,6 +108,9 @@ def create_metric_chart(df, ticker, metric, title, height=400):
         y_min = visible_data[metric].min() - padding
         y_max = visible_data[metric].max() + padding
         fig.update_yaxes(range=[y_min, y_max])
+
+    tickvals, ticktext = _report_ticks(clean_data)
+    fig.update_xaxes(tickmode="array", tickvals=tickvals, ticktext=ticktext)
 
     fig.update_layout(
         xaxis_title="",
@@ -385,6 +426,9 @@ def create_combined_peg_pegy_chart(df, ticker, height=400):
         y_max = max(y_max, 1.5)
         fig.update_yaxes(range=[y_min, y_max])
 
+    tickvals, ticktext = _report_ticks(ticker_data)
+    fig.update_xaxes(tickmode="array", tickvals=tickvals, ticktext=ticktext)
+
     fig.update_layout(
         title="PEG & PEGY Ratios Comparison",
         xaxis_title="",
@@ -609,6 +653,14 @@ def create_eps_prediction_chart(df, ticker):
             x_min = clean_data["Index"].min() - 0.5
         fig.update_xaxes(range=[x_min, x_max])
 
+        last_report = clean_data.loc[clean_data["Index"].idxmax(), "Report"]
+        tickvals, ticktext = _report_ticks(
+            clean_data,
+            extra_index=next_index,
+            extra_label=_next_quarter_label(last_report),
+        )
+        fig.update_xaxes(tickmode="array", tickvals=tickvals, ticktext=ticktext)
+
         # Extend y-axis to include all prediction values
         all_y_values = []
         # Add historical data (visible range)
@@ -812,6 +864,14 @@ def create_eps_ttm_prediction_chart(df, ticker):
         else:
             x_min = clean_data["Index"].min() - 0.5
         fig.update_xaxes(range=[x_min, x_max])
+
+        last_report = clean_data.loc[clean_data["Index"].idxmax(), "Report"]
+        tickvals, ticktext = _report_ticks(
+            clean_data,
+            extra_index=next_index,
+            extra_label=_next_quarter_label(last_report),
+        )
+        fig.update_xaxes(tickmode="array", tickvals=tickvals, ticktext=ticktext)
 
         # Extend y-axis to include all TTM prediction values
         all_y_values = []
@@ -1020,6 +1080,14 @@ def create_price_prediction_chart(df, ticker):
         else:
             x_min = clean_data["Index"].min() - 0.5
         fig.update_xaxes(range=[x_min, x_max])
+
+        last_report = clean_data.loc[clean_data["Index"].idxmax(), "Report"]
+        tickvals, ticktext = _report_ticks(
+            clean_data,
+            extra_index=next_index,
+            extra_label=_next_quarter_label(last_report),
+        )
+        fig.update_xaxes(tickmode="array", tickvals=tickvals, ticktext=ticktext)
 
         # Extend y-axis to include all price prediction values
         all_y_values = []

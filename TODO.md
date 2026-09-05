@@ -10,12 +10,22 @@ bug with visible impact · P3 quality/maintainability · P4 data sourcing.
 
 ## P3 — Quality and maintainability
 
-### 15. Repo hygiene
-- [ ] `.claude/settings.local.json` is tracked but is a local file.
+### 15. Repo hygiene — data strategy still open
+- [x] `.claude/settings.local.json` untracked and gitignored (2026-09-05). It is
+      still in git history, which is public; rewriting history is the only way to
+      remove it and is probably not worth it — it holds tool permissions, a home
+      path and an email address, nothing secret.
+- [x] `setup_env.sh` no longer hardcodes a conda path (2026-09-05). It uses
+      `conda info --base`, falls back to the usual install locations, and takes a
+      `CONDA_ROOT` override; it now fails with a useful message instead of silently
+      doing nothing.
 - [ ] `data/` is entirely untracked (`.gitignore` excludes `*.xlsx`/`*.csv`), so the
       repo cannot run from a fresh clone **and the spreadsheet fixes made on
       2026-09-02 are not under version control**. Decide on a data strategy.
-- [ ] `setup_env.sh` hardcodes `/Users/dgonzalez/miniconda3`.
+      **This is a decision, not a fix** — the workbook is ~400KB and changes every
+      quarter, and `data/exports/` adds ~7MB of regenerable output. Options: commit
+      the workbook and gitignore `exports/`; keep both out and document where to get
+      the data; or use Git LFS.
 
 ## P4 — Data sourcing
 

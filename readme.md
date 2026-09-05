@@ -302,6 +302,54 @@ for ticker in ["AAPL", "MSFT", "GOOGL"]:
 > the per-ticker strategy silently falls back to `weighted_growth` while still
 > reporting "backtested optimal".
 
+### Option 5: Export every computed metric to a file
+
+Runs the same pipeline the dashboard runs and writes the results to disk, so the
+numbers can be read - or handed to another agent - without launching Streamlit:
+
+```bash
+source setup_env.sh
+python scripts/export_dashboard_data.py
+```
+
+Writes to `data/exports/` (about 5 seconds):
+
+| File | Contents |
+| --- | --- |
+| `stock_analysis_export.json` | Self-describing bundle: metadata, a full data dictionary, per-ticker snapshot and sector aggregates. ~1.4 MB. |
+| `quarterly_metrics.csv` | Full panel, one row per ticker per quarter, 56 columns. |
+| `ticker_snapshot.csv` | The per-ticker snapshot flattened for spreadsheets. |
+| `sector_summary.csv` | Per-sector averages and medians. |
+| `README.md` | Guide to the four files above. |
+
+Each ticker in the JSON carries its latest values, QoQ summaries, 4Q/8Q/12Q
+rolling averages, peer ranks within its sector and the whole panel, a
+next-quarter EPS/TTM/price forecast, and `data_flags.warnings` naming anything
+that makes its own metrics unreliable.
+
+Useful flags:
+
+```bash
+python scripts/export_dashboard_data.py --output-dir /tmp/export
+python scripts/export_dashboard_data.py --include-history   # embeds every
+                                                            # quarterly row in
+                                                            # the JSON (~17 MB)
+```
+
+Two deliberate differences from the dashboard, both of them fixes for the
+limitations noted above:
+
+- The exporter joins `core/classifications.py` onto the DataFrame, so sector
+  comparisons are populated rather than inert.
+- It `chdir`s to the repo root before predicting, so the per-ticker strategy
+  mapping always loads and forecasts do not depend on where you ran it from.
+
+Its `peer_comparison` block also ranks each ticker's latest quarter against
+other tickers' latest quarters, which is what a sector rank is normally read as.
+The pipeline's own `*_SectorRank` columns rank a row against every
+ticker-quarter row in the sector across all history; they are still exported in
+`quarterly_metrics.csv`, labelled as such in the data dictionary.
+
 ## Excluded Tickers
 
 `config/excluded_tickers.json` is the single source of truth for tickers with known
@@ -341,11 +389,13 @@ StockInsights/
 │
 ├── scripts/                       # CLI tools
 │   ├── indexer.py                # Data preprocessing script
-│   └── run_analysis.py           # Workflow automation
+│   ├── run_analysis.py           # Workflow automation
+│   └── export_dashboard_data.py  # Export all computed metrics to JSON/CSV
 │
 ├── data/                          # Data files
 │   ├── StockData.xlsx            # Input data file (user-provided)
 │   ├── StockData_Indexed.xlsx    # Generated indexed data
+│   ├── exports/                  # Generated metric exports (JSON + CSV)
 │   └── quotes/                   # Optional price data directory
 │
 ├── config/                        # Configuration files

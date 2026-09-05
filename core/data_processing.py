@@ -45,16 +45,26 @@ def report_range(reports: pd.Series) -> tuple[str | None, str | None]:
     return (labels[0], labels[-1]) if labels else (None, None)
 
 
-def load_stock_data(file_path: str) -> pd.DataFrame | None:
+def load_stock_data_with_stats(
+    file_path: str,
+) -> tuple[pd.DataFrame | None, dict]:
     """
-    Load and clean stock data from an Excel file.
+    Load and clean stock data, reporting what was dropped along the way.
+
+    This is the single implementation; ``load_stock_data`` is the plain
+    wrapper. The stats let a UI surface the same cleaning decisions the batch
+    path makes silently, without a second copy of the loader.
 
     Args:
         file_path: Path to the Excel file
 
     Returns:
-        Cleaned DataFrame or None if loading fails
+        (DataFrame or None, stats) where stats carries ``duplicates_dropped``
+        (int), ``excluded`` (ticker -> row count) and ``error``
+        (None, "not_found", or the exception message).
     """
+    stats: dict = {"duplicates_dropped": 0, "excluded": {}, "error": None}
+
     try:
         df = pd.read_excel(file_path)
 
@@ -90,18 +100,37 @@ def load_stock_data(file_path: str) -> pd.DataFrame | None:
 
         # Remove duplicates - keep the newest row when a label is repeated
         if ticker_col in df.columns:
+            before = len(df)
             df = df.drop_duplicates(subset=[ticker_col, report_col], keep="last")
+            stats["duplicates_dropped"] = before - len(df)
 
         # Drop tickers flagged in config/excluded_tickers.json
         from core.exclusions import filter_excluded
 
-        df, _ = filter_excluded(df)
+        df, dropped = filter_excluded(df)
+        stats["excluded"] = dropped
 
-        return df
+        return df, stats
     except FileNotFoundError:
-        return None
-    except Exception:
-        return None
+        stats["error"] = "not_found"
+        return None, stats
+    except Exception as exc:
+        stats["error"] = str(exc)
+        return None, stats
+
+
+def load_stock_data(file_path: str) -> pd.DataFrame | None:
+    """
+    Load and clean stock data from an Excel file.
+
+    Args:
+        file_path: Path to the Excel file
+
+    Returns:
+        Cleaned DataFrame or None if loading fails
+    """
+    df, _ = load_stock_data_with_stats(file_path)
+    return df
 
 
 def calculate_qoq_changes(df: pd.DataFrame) -> pd.DataFrame:
@@ -155,7 +184,11 @@ def calculate_qoq_changes(df: pd.DataFrame) -> pd.DataFrame:
         ):
             price_data = ticker_data[price_col]
             eps_ttm_data = df_with_qoq.loc[ticker_mask, eps_ttm_col]
-            multiple = price_data / eps_ttm_data
+            # A P/E on negative earnings is not a small multiple, it is an
+            # undefined one. Leaving it signed sorted money-losing companies to
+            # rank 1 wherever "lower is better".
+            positive_eps_ttm = eps_ttm_data.where(eps_ttm_data > 0)
+            multiple = price_data / positive_eps_ttm
             multiple = multiple.replace([np.inf, -np.inf], np.nan)
             df_with_qoq.loc[ticker_mask, multiple_col] = multiple
 
@@ -189,7 +222,10 @@ def calculate_qoq_changes(df: pd.DataFrame) -> pd.DataFrame:
             div_data = ticker_data[div_col]
             eps_ttm_data = df_with_qoq.loc[ticker_mask, eps_ttm_col]
             annual_div = div_data * RollingWindow.QUARTERS_PER_YEAR
-            payout_ratio = (annual_div / eps_ttm_data) * 100
+            # Undefined against non-positive earnings, same as Multiple: the
+            # ratio ranged -8,600 to 5,800 before this mask.
+            positive_eps_ttm = eps_ttm_data.where(eps_ttm_data > 0)
+            payout_ratio = (annual_div / positive_eps_ttm) * 100
             payout_ratio = payout_ratio.replace([np.inf, -np.inf], np.nan)
             payout_col = DerivedMetric.PAYOUT_RATIO.value
             df_with_qoq.loc[ticker_mask, payout_col] = payout_ratio
@@ -205,6 +241,10 @@ def calculate_qoq_changes(df: pd.DataFrame) -> pd.DataFrame:
         for metric in DerivedMetric.qoq_metrics():
             if metric in ticker_data.columns:
                 qoq_change = ticker_data[metric].pct_change(fill_method=None) * 100
+                # A percent change off a zero base is infinite, not a very large
+                # growth rate. Left in, it poisoned every rolling mean built on
+                # the series. The level ratios above already do this.
+                qoq_change = qoq_change.replace([np.inf, -np.inf], np.nan)
                 df_with_qoq.loc[ticker_mask, f"{metric}_QoQ"] = qoq_change
 
         # Calculate advanced metrics requiring QoQ data
@@ -241,13 +281,19 @@ def calculate_qoq_changes(df: pd.DataFrame) -> pd.DataFrame:
         if rev_qoq_col in ticker_data_with_qoq.columns:
             revenue_qoq_values = ticker_data_with_qoq[rev_qoq_col].dropna()
             if len(revenue_qoq_values) >= RollingWindow.SHORT:
-                rolling_mean = revenue_qoq_values.rolling(
-                    window=RollingWindow.LONG, min_periods=RollingWindow.SHORT
-                ).mean()
                 rolling_std = revenue_qoq_values.rolling(
                     window=RollingWindow.LONG, min_periods=RollingWindow.SHORT
                 ).std()
-                revenue_consistency = 100 - ((rolling_std / rolling_mean.abs()) * 100)
+                # The old definition divided by |rolling_mean|, which is near
+                # zero for a normal company, so the score exploded: dataset
+                # median -318, min -1,860,112. Score the dispersion directly
+                # instead. Bounded (0, 100]: 100 is a perfectly steady revenue
+                # line, and the score halves for every
+                # CONSISTENCY_VOLATILITY_SCALE percentage points of typical
+                # quarterly swing.
+                revenue_consistency = 100 / (
+                    1 + rolling_std.abs() / Thresholds.CONSISTENCY_VOLATILITY_SCALE
+                )
                 revenue_consistency = revenue_consistency.replace(
                     [np.inf, -np.inf], np.nan
                 )
@@ -274,7 +320,11 @@ def calculate_qoq_changes(df: pd.DataFrame) -> pd.DataFrame:
                 eps_growth_annual = (
                     (1 + eps_growth_4q / 100) ** RollingWindow.QUARTERS_PER_YEAR - 1
                 ) * 100
-                peg_ratio = multiple_data / eps_growth_annual.abs()
+                # .abs() here made -30% and +30% annual EPS growth produce the
+                # same PEG, so shrinking companies looked cheap. PEG is only
+                # defined for positive growth.
+                positive_growth = eps_growth_annual.where(eps_growth_annual > 0)
+                peg_ratio = multiple_data / positive_growth
                 peg_ratio = peg_ratio.replace([np.inf, -np.inf], np.nan)
                 peg_col = DerivedMetric.PEG_RATIO.value
                 df_with_qoq.loc[ticker_mask, peg_col] = peg_ratio

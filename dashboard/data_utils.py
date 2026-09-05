@@ -18,8 +18,6 @@ The core module has no Streamlit dependencies and can be used in any
 Python application.
 """
 
-import numpy as np
-import pandas as pd
 import streamlit as st
 
 # Re-export core functions for backward compatibility
@@ -29,8 +27,8 @@ from core.data_processing import (  # noqa: F401
     calculate_outperformance_ratios,
     calculate_qoq_changes,
     calculate_sector_rankings,
+    load_stock_data_with_stats,
 )
-from core.enums import Column, Metric
 from core.predictions import predict_next_eps  # noqa: F401
 
 
@@ -39,8 +37,9 @@ def load_data(file_path):
     """
     Load the processed stock data with Streamlit caching.
 
-    This is a Streamlit-specific wrapper around core.load_stock_data
-    that adds caching and user-friendly error messages.
+    A thin wrapper around core.load_stock_data_with_stats: the cleaning rules
+    live in core so the dashboard and the batch paths cannot drift apart. This
+    adds only caching and user-facing messages.
 
     Args:
         file_path: Path to the Excel file
@@ -48,66 +47,25 @@ def load_data(file_path):
     Returns:
         DataFrame or None if loading fails
     """
-    try:
-        df = pd.read_excel(file_path)
+    df, stats = load_stock_data_with_stats(file_path)
 
-        # Clean numeric columns - convert non-numeric values to NaN
-        numeric_columns = Metric.numeric_columns()
-        for col in numeric_columns:
-            if col in df.columns:
-                df[col] = pd.to_numeric(df[col], errors="coerce")
-
-        # Parse the quarterly earnings report date as a datetime
-        earnings_date_col = Column.EARNINGS_DATE.value
-        if earnings_date_col in df.columns:
-            df[earnings_date_col] = pd.to_datetime(
-                df[earnings_date_col], errors="coerce"
-            )
-
-        # Clean and normalize ticker symbols to prevent duplicates
-        ticker_col = Column.TICKER.value
-        report_col = Column.REPORT.value
-
-        if ticker_col in df.columns:
-            try:
-                from core.classifications import normalize_symbol
-
-                df[ticker_col] = df[ticker_col].astype(str).apply(normalize_symbol)
-            except ImportError:
-                # Fallback to basic cleaning
-                df[ticker_col] = df[ticker_col].astype(str).str.strip().str.upper()
-
-        # Clean other text columns
-        for col in df.select_dtypes(include=["object"]).columns:
-            if col not in [ticker_col, report_col]:
-                df[col] = df[col].astype(str).str.strip()
-                df[col] = df[col].replace("", np.nan)
-
-        # Check for and warn about duplicate tickers after cleaning
-        if ticker_col in df.columns:
-            original_count = len(df)
-            df_clean = df.drop_duplicates(subset=[ticker_col, report_col], keep="last")
-            dropped_count = original_count - len(df_clean)
-            if dropped_count > 0:
-                st.warning(
-                    f"Removed {dropped_count} duplicate ticker/report "
-                    "combinations during data cleaning"
-                )
-                df = df_clean
-
-        # Drop tickers flagged in config/excluded_tickers.json
-        from core.exclusions import filter_excluded
-
-        df, dropped = filter_excluded(df)
-        if dropped:
-            summary = ", ".join(f"{t} ({n})" for t, n in sorted(dropped.items()))
-            st.info(f"Excluded tickers (config/excluded_tickers.json): {summary}")
-
-        return df
-
-    except FileNotFoundError:
+    if stats["error"] == "not_found":
         st.error(f"File not found: {file_path}")
         return None
-    except Exception as e:
-        st.error(f"Error loading data: {str(e)}")
+    if stats["error"] is not None:
+        st.error(f"Error loading data: {stats['error']}")
         return None
+
+    if stats["duplicates_dropped"]:
+        st.warning(
+            f"Removed {stats['duplicates_dropped']} duplicate ticker/report "
+            "combinations during data cleaning"
+        )
+
+    if stats["excluded"]:
+        summary = ", ".join(
+            f"{ticker} ({count})" for ticker, count in sorted(stats["excluded"].items())
+        )
+        st.info(f"Excluded tickers (config/excluded_tickers.json): {summary}")
+
+    return df

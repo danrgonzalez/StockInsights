@@ -8,32 +8,6 @@ bug with visible impact · P3 quality/maintainability · P4 data sourcing.
 
 ---
 
-## P1 — Silently wrong results
-
-### 2. Negative earnings invert the sector rankings
-318 rows have `EPS_TTM < 0`, making `Multiple` negative (min **-33,282**).
-`DerivedMetric.negative_ranking_metrics()` ranks Multiple/PEG/PEGY *ascending*
-("lower is better"), so a money-losing company sorts to **rank 1**. `PayoutRatio`
-shares the cause (range -8,600 to 5,800).
-
-- [ ] Mask `Multiple`, `PEGRatio`, `PEGYRatio`, `PayoutRatio` to `NaN` where
-      `EPS_TTM <= 0` in `core/data_processing.py`.
-
-### 3. `PEGRatio` hides earnings decline
-`core/data_processing.py:247` divides by `eps_growth_annual.abs()`, so -30% and +30%
-annual EPS growth produce an identical PEG. Shrinking companies look cheap.
-
-- [ ] Drop the `.abs()`; return `NaN` for non-positive growth.
-
-### 4. `RevenueConsistency` is unusable for most rows
-`100 - (rolling_std / |rolling_mean|) * 100` explodes when mean `Revenue_QoQ` nears
-zero, which is normal. Dataset-wide: median **-318**, p05 **-3,348**, min
-**-1,860,112**. It is charted as a real metric and sits in `positive_ranking_metrics()`.
-
-- [ ] Replace with a bounded definition (not a clamp on the current one).
-
----
-
 ## P2 — Correctness bugs
 
 ### 8. Sector ranking is dead code
@@ -99,20 +73,6 @@ would be as soon as the feature is wired up.
 ---
 
 ## P3 — Quality and maintainability
-
-### 9. No tests
-~7,450 lines, nearly all financial arithmetic, zero test files. Root cause of items
-2-4 going unnoticed.
-
-- [ ] Add tests over `calculate_qoq_changes` covering negative EPS_TTM, zero-crossing
-      revenue growth, and TTM boundaries — write these *with* the P1 fixes.
-
-### 10. `dashboard.data_utils.load_data` duplicates `core.load_stock_data`
-It documents itself as "a Streamlit-specific wrapper" but copies the whole body. Every
-load-time fix must currently land in both — the exclusion filter and the
-`keep="last"` change both had to be applied twice.
-
-- [ ] Make it delegate to `core.load_stock_data` and keep only caching + `st` messaging.
 
 ### 15. Repo hygiene
 - [ ] `.claude/settings.local.json` is tracked but is a local file.
@@ -257,6 +217,39 @@ of the above.
 ---
 
 ## Done — 2026-09-05
+
+- [x] **Item 2** — `Multiple`, `PayoutRatio`, `PEGRatio` and `PEGYRatio` are `NaN`
+      wherever `EPS_TTM <= 0`, masked at the two sources (`Multiple`, `PayoutRatio`)
+      so the two derived ratios inherit it. All 289 negative-earnings rows now carry
+      `NaN` on all four. `Multiple` min went from **-33,282 to 1.59**, `PayoutRatio`
+      from -8,600 to 0.00 — a money-losing company can no longer sort to rank 1 where
+      "lower is better".
+- [x] **Item 3** — dropped the `.abs()` in `PEGRatio`; non-positive growth returns
+      `NaN`. A shrinking company no longer looks cheap.
+- [x] **Item 4** — `RevenueConsistency` is now `100 / (1 + std / SCALE)` over the 8Q
+      rolling std of `Revenue_QoQ`, with the near-zero `|mean|` denominator gone
+      entirely. Bounded (0, 100] on every row; dataset median moved from **-318 to
+      53.3**. `SCALE` (`Thresholds.CONSISTENCY_VOLATILITY_SCALE`) is set to 10
+      percentage points — the dataset's median rolling std, which centres the score
+      and gives the widest spread. **That constant is a judgement call**: it sets how
+      harshly volatility is punished and is worth a second opinion. Face validity
+      looks right (NFLX 89, CL 85 at the top; EA 19, DECK 20, M 20 at the bottom).
+- [x] **Item 9** — added `tests/test_data_processing.py`, 27 tests over
+      `calculate_qoq_changes` covering negative and zero `EPS_TTM`, PEG against a
+      declining company, revenue growth crossing zero, TTM window boundaries, the
+      dividend and `Report`-ordering fixes. `pytest>=9.1.1` added to
+      `requirements-dev.txt`.
+- [x] **Item 10** — `core.load_stock_data_with_stats` is now the single loader
+      implementation, reporting `duplicates_dropped` / `excluded` / `error`;
+      `core.load_stock_data` and `dashboard.data_utils.load_data` are both thin
+      wrappers over it. The dashboard keeps its caching and `st` messaging and lost
+      the copied body — 110 lines to 71 — and both loaders were verified to return
+      identical frames.
+- [x] **New, found by the tests** — `*_QoQ` percent changes off a zero base produced
+      `inf`, which was never cleaned the way the level ratios were, so it propagated
+      into every rolling mean built on the series. Present in the real data: 16
+      infinities across `EPS_QoQ`, `DivAmt_QoQ`, `DivYield_QoQ`, `PayoutRatio_QoQ`.
+      Now replaced with `NaN`; the panel has none left.
 
 - [x] **Item 1** — `FilePaths` entries are now absolute, resolved from
       `core/enums.py` via `REPO_ROOT`, so `core/` behaves identically from a notebook

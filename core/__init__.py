@@ -57,6 +57,9 @@ from core.data_processing import (
     calculate_qoq_changes,
     calculate_sector_rankings,
     load_stock_data,
+    load_stock_data_with_stats,
+    report_range,
+    report_sort_key,
 )
 
 # Enums and constants (consistent vocabulary)
@@ -113,6 +116,9 @@ __all__ = [
     "DefaultTickers",
     # Data loading
     "load_stock_data",
+    "load_stock_data_with_stats",
+    "report_range",
+    "report_sort_key",
     # Core calculations
     "calculate_qoq_changes",
     "calculate_sector_rankings",

@@ -270,6 +270,13 @@ class Thresholds:
     # Volatility
     MIN_VOLATILITY = 5.0  # Minimum 5% volatility floor
 
+    # RevenueConsistency scale, in percentage points of Revenue_QoQ standard
+    # deviation. The score is 100 / (1 + std / SCALE), so a ticker whose
+    # quarterly revenue growth typically swings by this much scores 50.
+    # Set to the dataset's median 8Q rolling std (8.76pp, rounded), which
+    # centres the score near 50 and gives the widest spread across tickers.
+    CONSISTENCY_VOLATILITY_SCALE = 10.0
+
     # Minimum data requirements
     MIN_QUARTERS_FOR_PREDICTION = 4
     MIN_QOQ_DATA_POINTS = 3

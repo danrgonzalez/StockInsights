@@ -20,6 +20,51 @@ from core.enums import (
 )
 
 
+def latest_with_age(
+    ticker_data: pd.DataFrame, column: str
+) -> tuple[float | None, str | None, int | None]:
+    """Most recent non-null value for one ticker's column, with its age.
+
+    ``dropna().iloc[-1]`` returns the last value that exists, which is not the
+    same as the value for the latest quarter. When a company stops paying a
+    dividend the column goes blank but the old figure keeps being reported as
+    current -- DAL's card showed the dividend it last paid in Q4'19.
+
+    Args:
+        ticker_data: Rows for a single ticker.
+        column: Column to read.
+
+    Returns:
+        ``(value, report_label, quarters_stale)``, where ``quarters_stale`` is 0
+        when the value belongs to the ticker's latest row. ``(None, None, None)``
+        when the column is missing or entirely blank.
+    """
+    if column not in ticker_data.columns or ticker_data.empty:
+        return (None, None, None)
+
+    index_col = Column.INDEX.value
+    ordered = (
+        ticker_data.sort_values(index_col)
+        if index_col in ticker_data.columns
+        else ticker_data
+    )
+
+    present = ordered[ordered[column].notna()]
+    if present.empty:
+        return (None, None, None)
+
+    source = present.iloc[-1]
+    report_col = Column.REPORT.value
+    label = str(source[report_col]) if report_col in ordered.columns else None
+
+    if index_col in ordered.columns:
+        stale = int(ordered[index_col].iloc[-1] - source[index_col])
+    else:
+        stale = len(ordered) - 1 - ordered.index.get_loc(source.name)
+
+    return (source[column], label, stale)
+
+
 def report_sort_key(label: str) -> tuple[int, int]:
     """Sort key for a fiscal quarter label such as ``Q3'25``.
 

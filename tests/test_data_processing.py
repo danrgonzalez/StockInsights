@@ -13,6 +13,7 @@ import pytest
 
 from core.data_processing import (
     calculate_qoq_changes,
+    latest_with_age,
     report_range,
     report_sort_key,
 )
@@ -257,3 +258,38 @@ class TestReportOrdering:
 
     def test_empty_series_gives_no_range(self):
         assert report_range(pd.Series([], dtype=object)) == (None, None)
+
+
+class TestLatestWithAge:
+    """Item 28: 'latest' must not silently reach back through blank quarters."""
+
+    def test_current_value_reports_zero_staleness(self):
+        df = build_panel([1.0, 2.0, 3.0, 4.0])
+        value, quarter, stale = latest_with_age(df, "EPS")
+
+        assert value == pytest.approx(4.0)
+        assert quarter == "Q4'20"
+        assert stale == 0
+
+    def test_blank_latest_quarters_are_counted(self):
+        """The DAL case: a dividend that stopped, still shown as current."""
+        df = build_panel([1.0] * 6, div=[0.25, 0.25, np.nan, np.nan, np.nan, np.nan])
+        value, quarter, stale = latest_with_age(df, "DivAmt")
+
+        assert value == pytest.approx(0.25)
+        assert stale == 4, "value is four quarters behind the latest row"
+
+    def test_entirely_blank_column_returns_nothing(self):
+        df = build_panel([1.0] * 4, div=[np.nan] * 4)
+        assert latest_with_age(df, "DivAmt") == (None, None, None)
+
+    def test_missing_column_returns_nothing(self):
+        df = build_panel([1.0] * 4)
+        assert latest_with_age(df, "NoSuchColumn") == (None, None, None)
+
+    def test_unordered_rows_still_resolve_by_index(self):
+        df = build_panel([1.0, 2.0, 3.0, 4.0]).sample(frac=1, random_state=0)
+        value, _, stale = latest_with_age(df, "EPS")
+
+        assert value == pytest.approx(4.0)
+        assert stale == 0

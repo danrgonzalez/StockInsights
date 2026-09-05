@@ -11,7 +11,7 @@ import pandas as pd  # noqa: E402
 import streamlit as st  # noqa: E402
 
 from core.classifications import get_stock_classification  # noqa: E402
-from core.data_processing import report_range  # noqa: E402
+from core.data_processing import latest_with_age, report_range  # noqa: E402
 from core.enums import (  # noqa: E402
     Confidence,
     DefaultTickers,
@@ -63,6 +63,12 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
+
+def _value_if_current(ticker_data, column):
+    """Latest value for a column, but only when it is the latest quarter's."""
+    value, _, stale = latest_with_age(ticker_data, column)
+    return value if stale == 0 else np.nan
 
 
 def main():
@@ -977,23 +983,13 @@ def main():
                     ticker_summary[f"{metric}_8Q_Avg"] = np.nan
                     ticker_summary[f"{metric}_12Q_Avg"] = np.nan
 
-            # Add latest Multiple and Revenue_TTM values
-            latest_multiple = (
-                ticker_data["Multiple"].dropna().iloc[-1]
-                if (
-                    "Multiple" in ticker_data.columns
-                    and not ticker_data["Multiple"].dropna().empty
-                )
-                else np.nan
-            )
-            latest_revenue_ttm = (
-                ticker_data["Revenue_TTM"].dropna().iloc[-1]
-                if (
-                    "Revenue_TTM" in ticker_data.columns
-                    and not ticker_data["Revenue_TTM"].dropna().empty
-                )
-                else np.nan
-            )
+            # Add latest Multiple and Revenue_TTM values. These sit in a
+            # cross-ticker comparison table under a "Latest" header, so only a
+            # value belonging to the ticker's latest quarter belongs here --
+            # dropna().iloc[-1] used to reach back years and compare a 2019
+            # figure against everyone else's current one.
+            latest_multiple = _value_if_current(ticker_data, "Multiple")
+            latest_revenue_ttm = _value_if_current(ticker_data, "Revenue_TTM")
 
             ticker_summary["Latest_Multiple"] = latest_multiple
             ticker_summary["Latest_Revenue_TTM"] = latest_revenue_ttm

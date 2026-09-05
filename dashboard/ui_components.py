@@ -1,140 +1,124 @@
 import streamlit as st
 
+from core.data_processing import latest_with_age
+
+
+def _stale_note(label, quarter, stale):
+    """Wording for a value that is not from the ticker's latest quarter."""
+    if not stale:
+        return None
+    quarters = "quarter" if stale == 1 else "quarters"
+    return (
+        f"{label} is from {quarter}, {stale} {quarters} before the latest "
+        "reported quarter, which has no value for it."
+    )
+
+
+def _read(ticker_data, column, label):
+    """Latest value for a column plus a note when it is stale.
+
+    Returns (value, note) with value None when the column is missing or blank.
+    """
+    value, quarter, stale = latest_with_age(ticker_data, column)
+    if value is None:
+        return None, None
+    return value, _stale_note(label, quarter, stale)
+
+
+def _render(title, value_text, helps, notes):
+    """One st.metric, flagged when any value behind it is stale."""
+    notes = [note for note in notes if note]
+    parts = [part for part in helps if part]
+    if notes:
+        title = f"{title} ⚠️"
+        parts.extend(notes)
+    st.metric(title, value_text, help=" | ".join(parts) if parts else None)
+
 
 def display_summary_stats(df, ticker):
     ticker_data = df[df["Ticker"] == ticker]
     col1, col2, col3, col4, col5, col6 = st.columns(6)
+
     with col1:
         st.metric("Total Records", len(ticker_data))
+
     with col2:
-        latest_eps = (
-            ticker_data["EPS"].dropna().iloc[-1]
-            if not ticker_data["EPS"].dropna().empty
-            else "N/A"
-        )
-        latest_eps_ttm = (
-            ticker_data["EPS_TTM"].dropna().iloc[-1]
-            if (
-                "EPS_TTM" in ticker_data.columns
-                and not ticker_data["EPS_TTM"].dropna().empty
-            )
-            else "N/A"
-        )
-        if latest_eps != "N/A" and latest_eps_ttm != "N/A":
-            st.metric(
-                "Latest EPS", f"{latest_eps:.2f}", help=f"TTM: {latest_eps_ttm:.2f}"
-            )
-        elif latest_eps != "N/A":
-            st.metric("Latest EPS", f"{latest_eps:.2f}")
-        else:
+        eps, eps_note = _read(ticker_data, "EPS", "EPS")
+        eps_ttm, eps_ttm_note = _read(ticker_data, "EPS_TTM", "EPS TTM")
+        if eps is None:
             st.metric("Latest EPS", "N/A")
+        else:
+            _render(
+                "Latest EPS",
+                f"{eps:.2f}",
+                [f"TTM: {eps_ttm:.2f}" if eps_ttm is not None else None],
+                [eps_note, eps_ttm_note],
+            )
+
     with col3:
-        latest_revenue = (
-            ticker_data["Revenue"].dropna().iloc[-1]
-            if not ticker_data["Revenue"].dropna().empty
-            else "N/A"
-        )
-        latest_revenue_ttm = (
-            ticker_data["Revenue_TTM"].dropna().iloc[-1]
-            if (
-                "Revenue_TTM" in ticker_data.columns
-                and not ticker_data["Revenue_TTM"].dropna().empty
-            )
-            else "N/A"
-        )
-        if latest_revenue != "N/A" and latest_revenue_ttm != "N/A":
-            st.metric(
-                "Latest Revenue",
-                f"${latest_revenue:,.0f}M",
-                help=f"TTM: ${latest_revenue_ttm:,.0f}M",
-            )
-        elif latest_revenue != "N/A":
-            st.metric("Latest Revenue", f"${latest_revenue:,.0f}M")
-        else:
+        revenue, rev_note = _read(ticker_data, "Revenue", "Revenue")
+        revenue_ttm, rev_ttm_note = _read(ticker_data, "Revenue_TTM", "Revenue TTM")
+        if revenue is None:
             st.metric("Latest Revenue", "N/A")
+        else:
+            _render(
+                "Latest Revenue",
+                f"${revenue:,.0f}M",
+                [f"TTM: ${revenue_ttm:,.0f}M" if revenue_ttm is not None else None],
+                [rev_note, rev_ttm_note],
+            )
+
     with col4:
-        latest_price = (
-            ticker_data["Price"].dropna().iloc[-1]
-            if not ticker_data["Price"].dropna().empty
-            else "N/A"
-        )
-        latest_multiple = (
-            ticker_data["Multiple"].dropna().iloc[-1]
-            if (
-                "Multiple" in ticker_data.columns
-                and not ticker_data["Multiple"].dropna().empty
-            )
-            else "N/A"
-        )
-        if latest_price != "N/A" and latest_multiple != "N/A":
-            st.metric(
-                "Latest Price",
-                f"${latest_price:.2f}",
-                help=f"P/E Multiple: {latest_multiple:.1f}x",
-            )
-        elif latest_price != "N/A":
-            st.metric("Latest Price", f"${latest_price:.2f}")
-        else:
+        price, price_note = _read(ticker_data, "Price", "Price")
+        multiple, multiple_note = _read(ticker_data, "Multiple", "P/E Multiple")
+        if price is None:
             st.metric("Latest Price", "N/A")
+        else:
+            _render(
+                "Latest Price",
+                f"${price:.2f}",
+                [
+                    (
+                        f"P/E Multiple: {multiple:.1f}x"
+                        if multiple is not None
+                        else "P/E Multiple: n/a (earnings not positive)"
+                    )
+                ],
+                [price_note, multiple_note],
+            )
+
     with col5:
-        latest_div_yield_annual = (
-            ticker_data["DivYieldAnnual"].dropna().iloc[-1]
-            if (
-                "DivYieldAnnual" in ticker_data.columns
-                and not ticker_data["DivYieldAnnual"].dropna().empty
-            )
-            else "N/A"
+        yield_annual, ya_note = _read(
+            ticker_data, "DivYieldAnnual", "Annual dividend yield"
         )
-        latest_div_yield_quarterly = (
-            ticker_data["DivYield"].dropna().iloc[-1]
-            if (
-                "DivYield" in ticker_data.columns
-                and not ticker_data["DivYield"].dropna().empty
-            )
-            else "N/A"
+        yield_quarterly, yq_note = _read(
+            ticker_data, "DivYield", "Quarterly dividend yield"
         )
-        latest_div_amt = (
-            ticker_data["DivAmt"].dropna().iloc[-1]
-            if not ticker_data["DivAmt"].dropna().empty
-            else "N/A"
-        )
-        if latest_div_yield_annual != "N/A" and latest_div_yield_quarterly != "N/A":
-            st.metric(
-                "Dividend Yield (Annual)",
-                f"{latest_div_yield_annual:.2f}%",
-                help=(
-                    f"Quarterly: {latest_div_yield_quarterly:.2f}% | "
-                    f"Amount: ${latest_div_amt:.2f}"
-                ),
-            )
-        elif latest_div_yield_annual != "N/A":
-            st.metric("Dividend Yield (Annual)", f"{latest_div_yield_annual:.2f}%")
-        else:
+        div_amt, amt_note = _read(ticker_data, "DivAmt", "Dividend amount")
+        if yield_annual is None:
             st.metric("Dividend Yield (Annual)", "N/A")
-    with col6:
-        latest_peg_ratio = (
-            ticker_data["PEGRatio"].dropna().iloc[-1]
-            if (
-                "PEGRatio" in ticker_data.columns
-                and not ticker_data["PEGRatio"].dropna().empty
-            )
-            else "N/A"
-        )
-        latest_payout_ratio = (
-            ticker_data["PayoutRatio"].dropna().iloc[-1]
-            if (
-                "PayoutRatio" in ticker_data.columns
-                and not ticker_data["PayoutRatio"].dropna().empty
-            )
-            else "N/A"
-        )
-        if latest_peg_ratio != "N/A" and latest_payout_ratio != "N/A":
-            st.metric(
-                "PEG Ratio",
-                f"{latest_peg_ratio:.2f}",
-                help=f"Payout Ratio: {latest_payout_ratio:.1f}%",
-            )
-        elif latest_peg_ratio != "N/A":
-            st.metric("PEG Ratio", f"{latest_peg_ratio:.2f}")
         else:
+            detail = []
+            if yield_quarterly is not None:
+                detail.append(f"Quarterly: {yield_quarterly:.2f}%")
+            if div_amt is not None:
+                detail.append(f"Amount: ${div_amt:.2f}")
+            _render(
+                "Dividend Yield (Annual)",
+                f"{yield_annual:.2f}%",
+                [" | ".join(detail) if detail else None],
+                [ya_note, yq_note, amt_note],
+            )
+
+    with col6:
+        peg, peg_note = _read(ticker_data, "PEGRatio", "PEG ratio")
+        payout, payout_note = _read(ticker_data, "PayoutRatio", "Payout ratio")
+        if peg is None:
             st.metric("PEG Ratio", "N/A")
+        else:
+            _render(
+                "PEG Ratio",
+                f"{peg:.2f}",
+                [f"Payout Ratio: {payout:.1f}%" if payout is not None else None],
+                [peg_note, payout_note],
+            )

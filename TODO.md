@@ -20,29 +20,6 @@ classifications are simply never joined onto the DataFrame.
 - [ ] Join sector/industry onto `df` in `dashboard/app.py:main()` (one line), or
       remove the feature and its Methodology entry.
 
-### 28. "Latest" values silently reach back through blank quarters
-`dropna().iloc[-1]` — 11 occurrences in `dashboard/ui_components.py`, plus
-`dashboard/app.py:998` and `:1006` — takes the last *non-null* value, not the value
-for the latest quarter. When a company stops paying a dividend the card keeps
-displaying the last one it ever paid, with no indication of age.
-
-Nine tickers carry a latest value more than one quarter stale:
-
-| Ticker | Stale metrics | Quarters behind |
-|--------|---------------|-----------------|
-| `DAL`, `LUV`, `EXPE` | DivAmt, DivYield, DivYieldAnnual, PayoutRatio, PEGYRatio | 25-26 |
-| `AAL`, `BA`, `MGM` | PEGYRatio | 14-26 |
-| `INTC`, `GPRO` | PEGYRatio / EPSMomentum | 7 |
-| `PVH` | dividend metrics | 2 |
-
-`DAL` is the clearest case: its latest row is `Q2'26` with a null `DivAmt`, but the
-card displays **$0.4025**, the dividend it paid in `Q4'19` (reported 2020-01-09).
-Dividends were suspended in the pandemic and, for these tickers, never resumed in the
-data.
-
-- [ ] Read the latest value from the latest row, or carry the source quarter with the
-      value and label it when it is not current.
-
 ### 29. Sector rank and outperformance compare against every historical row
 Amends item 8 — its one-line fix is not sufficient on its own.
 
@@ -217,6 +194,16 @@ of the above.
 ---
 
 ## Done — 2026-09-05
+
+- [x] **Item 28** — added `core.latest_with_age(ticker_data, column)`, returning the
+      value, its source quarter and how many quarters stale it is. The six summary
+      cards now flag a stale value with ⚠️ and explain it in the tooltip (DAL:
+      "Dividend amount is from Q4'19, 26 quarters before the latest reported quarter,
+      which has no value for it"). The two `Latest_*` columns in the cross-ticker
+      comparison table show a value only when it belongs to the latest quarter —
+      under a "Latest" header, a 2019 figure compared against everyone else's current
+      one is simply wrong. Flagging confirmed for DAL, LUV, EXPE, AAL, INTC, GPRO and
+      PVH; AAPL and other current tickers are unflagged.
 
 - [x] **Item 2** — `Multiple`, `PayoutRatio`, `PEGRatio` and `PEGYRatio` are `NaN`
       wherever `EPS_TTM <= 0`, masked at the two sources (`Multiple`, `PayoutRatio`)

@@ -49,6 +49,7 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from core.backtesting import load_ticker_strategy_mapping  # noqa: E402
 from core.data_processing import (  # noqa: E402
+    attach_classifications,
     calculate_downside_capture,
     calculate_outperformance_ratios,
     calculate_qoq_changes,
@@ -65,13 +66,6 @@ from core.enums import (  # noqa: E402
     Strategy,
 )
 from core.predictions import predict_next_eps  # noqa: E402
-
-try:
-    from core.classifications import get_stock_classification
-
-    CLASSIFICATIONS_AVAILABLE = True
-except ImportError:  # pragma: no cover - classifications ship with the repo
-    CLASSIFICATIONS_AVAILABLE = False
 
 # Metrics whose latest value the snapshot reports (dashboard summary cards +
 # everything else calculate_qoq_changes produces).
@@ -159,7 +153,7 @@ def build_panel(input_path: str) -> pd.DataFrame:
     if df is None:
         raise SystemExit(f"ERROR: could not load {input_path}")
 
-    df = add_classifications(df)
+    df = attach_classifications(df)
 
     # Same order as dashboard/app.py main()
     df = calculate_qoq_changes(df)
@@ -170,38 +164,6 @@ def build_panel(input_path: str) -> pd.DataFrame:
     ticker_col = Column.TICKER.value
     index_col = Column.INDEX.value
     return df.sort_values([ticker_col, index_col]).reset_index(drop=True)
-
-
-def add_classifications(df: pd.DataFrame) -> pd.DataFrame:
-    """Attach Sector/Industry/Sub_Industry so sector-relative metrics resolve.
-
-    The dashboard looks classifications up per ticker inside its Rolling
-    Averages tab but never merges them into the main frame, which leaves its
-    sector rankings and sector outperformance columns empty. Merging them here
-    means those columns are populated in the export.
-    """
-    ticker_col = Column.TICKER.value
-    unknown = "Unclassified"
-
-    sectors, industries, sub_industries = [], [], []
-    for ticker in df[ticker_col]:
-        classification = (
-            get_stock_classification(ticker) if CLASSIFICATIONS_AVAILABLE else None
-        )
-        if classification is None:
-            sectors.append(unknown)
-            industries.append(unknown)
-            sub_industries.append(unknown)
-        else:
-            sectors.append(classification.sector.value)
-            industries.append(classification.industry.value)
-            sub_industries.append(classification.sub_industry.value)
-
-    df = df.copy()
-    df[Column.SECTOR.value] = sectors
-    df[Column.INDUSTRY.value] = industries
-    df[Column.SUB_INDUSTRY.value] = sub_industries
-    return df
 
 
 # ---------------------------------------------------------------------------
@@ -415,10 +377,9 @@ def peer_value(record: dict, metric: str):
 def attach_peer_comparison(snapshot: list[dict]) -> None:
     """Rank each ticker against its sector and the whole panel, in place.
 
-    The pipeline's own *_SectorRank / *_Outperf columns rank a row against every
-    ticker-quarter row in the sector across all history, which is not a peer
-    comparison. This ranks each ticker's latest reported value against the other
-    tickers' latest reported values, which is what the numbers are read as.
+    This mirrors the pipeline's own *_SectorRank / *_Outperf columns (both now
+    rank one row per ticker) but shapes the result for JSON consumers: peer
+    counts, percentiles and named gap fields alongside each value.
     """
     for record in snapshot:
         record["peer_comparison"] = {
@@ -634,19 +595,26 @@ def build_data_dictionary() -> dict:
                 "Computed for: " + ", ".join(QOQ_BASE_METRICS) + "."
             ),
             "<metric>_SectorRank": (
-                "Raw pipeline output, quarterly_metrics.csv only: rank of this "
-                "row among EVERY ticker-quarter row in the sector across all "
-                "history - a history-wide row rank, not a peer rank. Use the "
-                "JSON snapshot's peer_comparison to compare tickers."
+                "Rank of this ticker among its sector peers, 1 = best, computed "
+                "from each ticker's latest reported quarter. It is a property of "
+                "the company, so it repeats on every row of that ticker rather "
+                "than varying by quarter."
             ),
             "<metric>_MarketOutperf": (
-                "Raw pipeline output: value as a % of the mean across every row "
-                "in the panel (all tickers, all quarters, so a long-history "
-                "ticker weighs more)."
+                "Level metrics only (EPS_TTM, Revenue_TTM): value as a % of the "
+                "mean across tickers' latest quarters, so 100 is average."
             ),
             "<metric>_SectorOutperf": (
-                "Raw pipeline output: value as a % of the mean across every row "
-                "in that sector, all quarters included."
+                "As _MarketOutperf, but against the ticker's sector."
+            ),
+            "<metric>_MarketGapPP": (
+                "Percent metrics only (Price_QoQ, EPS_QoQ, Revenue_QoQ): the "
+                "ticker's value minus the mean across tickers' latest quarters, "
+                "in percentage points. A ratio is not used because the mean of a "
+                "percent series sits near zero."
+            ),
+            "<metric>_SectorGapPP": (
+                "As _MarketGapPP, but against the ticker's sector."
             ),
         },
         "snapshot_fields": {

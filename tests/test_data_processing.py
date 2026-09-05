@@ -12,7 +12,11 @@ import pandas as pd
 import pytest
 
 from core.data_processing import (
+    attach_classifications,
+    calculate_outperformance_ratios,
     calculate_qoq_changes,
+    calculate_sector_rankings,
+    latest_row_per_ticker,
     latest_with_age,
     report_range,
     report_sort_key,
@@ -293,3 +297,89 @@ class TestLatestWithAge:
 
         assert value == pytest.approx(4.0)
         assert stale == 0
+
+
+class TestPeerComparison:
+    """Items 8 and 29: peer ranks compare companies, not ticker-quarter rows."""
+
+    @staticmethod
+    def two_sector_panel():
+        """Two tickers with different history lengths in one sector."""
+        long_history = build_panel([1.0] * 20, price=[100.0] * 20, ticker="LONG")
+        short_history = build_panel([2.0] * 8, price=[100.0] * 8, ticker="SHORT")
+        df = pd.concat([long_history, short_history], ignore_index=True)
+        df["Sector"] = "Information Technology"
+        return calculate_qoq_changes(df)
+
+    def test_latest_row_per_ticker_returns_one_row_each(self):
+        df = self.two_sector_panel()
+        latest = latest_row_per_ticker(df)
+
+        assert len(latest) == df["Ticker"].nunique()
+        assert set(latest["Ticker"]) == {"LONG", "SHORT"}
+
+    def test_latest_row_is_the_highest_index(self):
+        df = self.two_sector_panel()
+        latest = latest_row_per_ticker(df).set_index("Ticker")
+
+        assert latest.loc["LONG", "Index"] == 20
+        assert latest.loc["SHORT", "Index"] == 8
+
+    def test_sector_rank_never_exceeds_the_number_of_peers(self):
+        """The old code ranked rows, producing ranks far above the peer count."""
+        df = calculate_sector_rankings(self.two_sector_panel())
+        ranks = df["EPS_TTM_SectorRank"].dropna()
+
+        assert len(ranks) > 0
+        assert ranks.max() <= df["Ticker"].nunique()
+
+    def test_rank_is_constant_across_a_tickers_rows(self):
+        df = calculate_sector_rankings(self.two_sector_panel())
+
+        for _, rows in df.groupby("Ticker"):
+            assert rows["EPS_TTM_SectorRank"].nunique(dropna=True) <= 1
+
+    def test_benchmark_is_not_row_weighted(self):
+        """A long-history ticker must not outweigh a short-history one."""
+        df = self.two_sector_panel()
+        latest = latest_row_per_ticker(df)
+
+        row_weighted = df["EPS_TTM"].mean()
+        per_ticker = latest["EPS_TTM"].mean()
+        assert per_ticker != pytest.approx(row_weighted)
+        assert per_ticker == pytest.approx(
+            (
+                latest.set_index("Ticker").loc["LONG", "EPS_TTM"]
+                + latest.set_index("Ticker").loc["SHORT", "EPS_TTM"]
+            )
+            / 2
+        )
+
+    def test_percent_metrics_are_compared_in_percentage_points(self):
+        df = calculate_outperformance_ratios(self.two_sector_panel())
+
+        assert "EPS_QoQ_MarketGapPP" in df.columns
+        assert "EPS_QoQ_MarketOutperf" not in df.columns
+
+    def test_level_metrics_keep_the_ratio_form(self):
+        df = calculate_outperformance_ratios(self.two_sector_panel())
+
+        assert "EPS_TTM_MarketOutperf" in df.columns
+        assert "EPS_TTM_MarketGapPP" not in df.columns
+
+    def test_no_sector_column_means_no_ranking(self):
+        df = calculate_qoq_changes(build_panel([1.0] * 8))
+        assert calculate_sector_rankings(df).equals(df)
+
+    def test_classifications_join_populates_the_sector_column(self):
+        df = calculate_qoq_changes(build_panel([1.0] * 8, ticker="AAPL"))
+        out = attach_classifications(df)
+
+        assert "Sector" in out.columns
+        assert out["Sector"].iloc[0] != "Unclassified"
+
+    def test_unknown_ticker_is_marked_unclassified(self):
+        df = calculate_qoq_changes(build_panel([1.0] * 8, ticker="ZZZZ"))
+        out = attach_classifications(df)
+
+        assert (out["Sector"] == "Unclassified").all()

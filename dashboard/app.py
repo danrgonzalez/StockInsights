@@ -11,7 +11,11 @@ import pandas as pd  # noqa: E402
 import streamlit as st  # noqa: E402
 
 from core.classifications import get_stock_classification  # noqa: E402
-from core.data_processing import latest_with_age, report_range  # noqa: E402
+from core.data_processing import (  # noqa: E402
+    attach_classifications,
+    latest_with_age,
+    report_range,
+)
 from core.enums import (  # noqa: E402
     Confidence,
     DefaultTickers,
@@ -121,6 +125,11 @@ def main():
 
     # Calculate QoQ changes
     df = calculate_qoq_changes(df)
+
+    # Sector/industry must be joined on before the sector analytics run --
+    # without it calculate_sector_rankings returns immediately and the whole
+    # sector feature is silently dead.
+    df = attach_classifications(df)
 
     # Calculate advanced analytics
     df = calculate_sector_rankings(df)
@@ -1533,14 +1542,22 @@ def main():
             st.markdown("""
             **Methodology**: Each ticker is ranked within its sector for key metrics
 
+            **What is compared**: one row per ticker — its latest reported
+            quarter — against the other tickers' latest quarters. The rank is a
+            property of the company, so it reads the same on every row of that
+            ticker and is not a per-quarter series.
+
             **Ranking Logic**:
             - **Higher is Better**: EPS_TTM, Revenue_TTM, DivYield (Q),
               DivYieldAnnual, Revenue Consistency, EPS Momentum
             - **Lower is Better**: P/E Multiple, Price Volatility, PEG Ratio, PEGY Ratio
 
-            **Example (AAPL in Technology)**:
-            - EPS_TTM Sector Rank: 3/25 (3rd highest EPS in Technology)
-            - PEG Ratio Sector Rank: 8/25 (8th lowest PEG in Technology)
+            **Example (AAPL in Information Technology, 35 ranked peers)**:
+            - P/E Multiple Sector Rank: 16/35 (16th lowest multiple)
+
+            **Exclusions**: a ticker with non-positive EPS_TTM has no meaningful
+            P/E, PEG or PEGY, so it is left out of those ranks rather than
+            sorted to the top of them.
 
             **Purpose**: Shows relative performance within peer group.
             Rank 1 = best in sector.
@@ -1548,21 +1565,29 @@ def main():
 
         with st.expander("**Outperformance Ratios**", expanded=False):
             st.markdown("""
-            **Formula**: `Outperformance = (Ticker Metric / Benchmark Average) × 100`
+            **Benchmarks**: built from one row per ticker — its latest
+            reported quarter — so a company with 60 quarters of history does
+            not outweigh one with 20.
+            - **Market**: vs. the average across all tickers
+            - **Sector**: vs. the average across the ticker's sector
 
-            **Benchmarks**:
-            - **Market Outperformance**: vs. all tickers average
-            - **Sector Outperformance**: vs. sector average
+            **Two forms, because the units differ**:
 
-            **Example (AAPL)**:
-            - AAPL EPS Growth: 15%
-            - Technology Sector Avg: 12%
-            - Market Avg: 8%
-            - **Sector Outperformance = (15% / 12%) × 100 = 125%**
-            - **Market Outperformance = (15% / 8%) × 100 = 188%**
+            *Level metrics* (EPS_TTM, Revenue_TTM) — `_MarketOutperf`,
+            `_SectorOutperf`:
+            `(Ticker Metric / Benchmark Average) × 100`, where 100 is average
+            and >100 is outperformance.
 
-            **Purpose**: Values >100% indicate outperformance. Shows relative
-            strength vs benchmarks.
+            *Percent metrics* (Price_QoQ, EPS_QoQ, Revenue_QoQ) —
+            `_MarketGapPP`, `_SectorGapPP`:
+            `Ticker Metric − Benchmark Average`, in percentage points. A ratio
+            is not used here: the average of a percent series sits near zero,
+            and dividing by it produces a number that looks like a ratio and
+            is not one.
+
+            **Example (percent metric)**:
+            - AAPL EPS growth: 15%, sector average 12%, market average 8%
+            - **Sector gap = +3.0 pp**, **Market gap = +7.0 pp**
             """)
 
         with st.expander("**Downside Capture**", expanded=False):

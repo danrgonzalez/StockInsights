@@ -8,47 +8,6 @@ bug with visible impact · P3 quality/maintainability · P4 data sourcing.
 
 ---
 
-## P2 — Correctness bugs
-
-### 8. Sector ranking is dead code
-`calculate_sector_rankings` returns immediately without a `Sector` column, and the
-data has none — confirmed live: it adds **0 columns**. The sector half of
-`calculate_outperformance_ratios` never runs either, while `dashboard/app.py:1617`
-documents Sector Rankings in detail. `get_stock_classification` already works; the
-classifications are simply never joined onto the DataFrame.
-
-- [ ] Join sector/industry onto `df` in `dashboard/app.py:main()` (one line), or
-      remove the feature and its Methodology entry.
-
-### 29. Sector rank and outperformance compare against every historical row
-Amends item 8 — its one-line fix is not sufficient on its own.
-
-`core/data_processing.py:370` ranks within a sector mask that spans **all quarters of
-all tickers**, not one row per ticker. Joining a `Sector` column as item 8 proposes
-makes the feature run, but it then produces ranks like AAPL `Multiple` = **957** and a
-`Multiple_SectorRank` max of **2,115** across 137 tickers. Read as "rank in sector",
-that is meaningless.
-
-`calculate_outperformance_ratios` has the same denominator problem and, unlike the
-sector half, it **already runs**: `core/data_processing.py:413` divides by
-`df[metric].mean()` over every row in the panel. For `Revenue_TTM` that mean is
-**51,927** against **79,613** for one-row-per-ticker — a 1.53x gap — and it is
-row-weighted, so a ticker with 60 quarters of history pulls the benchmark harder than
-one with 20. `dashboard/app.py:1636-1650` documents this to the user as "vs. all
-tickers average" with a peer-comparison example, which is not what the code computes.
-
-Neither result is currently displayed, so nothing on screen is wrong today. Both
-would be as soon as the feature is wired up.
-
-- [ ] Rank and benchmark one row per ticker (its latest quarter), not every historical
-      row — see `attach_peer_comparison` in `scripts/export_dashboard_data.py` for a
-      working version.
-- [ ] Exclude non-positive `Multiple`/`PEG`/`PEGY` from valuation ranks (overlaps
-      item 2) and compare percent-unit metrics as a difference in percentage points,
-      not as a ratio to a near-zero average.
-
----
-
 ## P3 — Quality and maintainability
 
 ### 15. Repo hygiene
@@ -194,6 +153,24 @@ of the above.
 ---
 
 ## Done — 2026-09-05
+
+- [x] **Items 8 + 29** — the sector feature is live and its arithmetic is a peer
+      comparison. `core.attach_classifications` joins Sector/Industry/Sub_Industry
+      onto the frame (the exporter's private copy deleted in favour of it) and
+      `dashboard/app.py:main()` calls it before the sector analytics, so the feature
+      adds **23 columns where it previously added 0**.
+      `calculate_sector_rankings` and `calculate_outperformance_ratios` now work off
+      `latest_row_per_ticker` — one row per company, its latest quarter. Max
+      `_SectorRank` fell from **2,115 to 36**, which is exactly the largest sector's
+      ticker count; AAPL's `Multiple_SectorRank` is **16 of 35** IT peers, not 957.
+      The market benchmark for `Revenue_TTM` moved from the row-weighted **51,927**
+      to **79,613** per ticker, the 1.53x gap the backlog predicted, and is no longer
+      pulled by long-history tickers. Percent-unit metrics (`Price_QoQ`, `EPS_QoQ`,
+      `Revenue_QoQ`) are reported as a percentage-point gap in new `_MarketGapPP` /
+      `_SectorGapPP` columns; level metrics keep the ratio form. Non-positive
+      valuations are already excluded via item 2. The Methodology expanders for both
+      Sector Rankings and Outperformance were rewritten — they had documented the old
+      behaviour to the user — and the exporter's data dictionary with them.
 
 - [x] **Item 28** — added `core.latest_with_age(ticker_data, column)`, returning the
       value, its source quarter and how many quarters stale it is. The six summary

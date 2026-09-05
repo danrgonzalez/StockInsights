@@ -175,6 +175,20 @@ class DerivedMetric(str, Enum):
         ]
 
     @classmethod
+    def percent_unit_metrics(cls) -> list[str]:
+        """Return metrics already expressed in percent.
+
+        These are benchmarked as a percentage-point difference rather than a
+        ratio, because the average of a percent series sits near zero and a
+        ratio against it is meaningless.
+        """
+        return [
+            cls.PRICE_QOQ.value,
+            cls.EPS_QOQ.value,
+            cls.REVENUE_QOQ.value,
+        ]
+
+    @classmethod
     def negative_ranking_metrics(cls) -> list[str]:
         """Return metrics where lower is better for sector ranking."""
         return [
@@ -248,6 +262,11 @@ class RankingSuffix(str, Enum):
     SECTOR_RANK = "_SectorRank"
     MARKET_OUTPERF = "_MarketOutperf"
     SECTOR_OUTPERF = "_SectorOutperf"
+    # Percent-unit metrics (anything already expressed as a %) are compared as a
+    # difference in percentage points. Dividing one percentage by another that
+    # sits near zero produces a number that looks like a ratio and is not one.
+    MARKET_GAP_PP = "_MarketGapPP"
+    SECTOR_GAP_PP = "_SectorGapPP"
 
     def column_name(self, metric: str) -> str:
         """Generate full column name for a metric with this suffix."""

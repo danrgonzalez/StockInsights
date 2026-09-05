@@ -460,64 +460,146 @@ def _calculate_dividend_growth(
     return df_with_qoq
 
 
-def calculate_sector_rankings(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Calculate sector rankings for each ticker based on key metrics.
+def attach_classifications(df: pd.DataFrame) -> pd.DataFrame:
+    """Add Sector, Industry and Sub_Industry columns, looked up per ticker.
+
+    ``get_stock_classification`` has always worked, but nothing joined its
+    output onto the frame, so ``calculate_sector_rankings`` returned
+    immediately for want of a Sector column and the whole sector feature was
+    dead. Tickers with no classification are marked "Unclassified", which
+    ``DataQuality.invalid_values()`` excludes from ranking.
 
     Args:
-        df: Stock data with calculated metrics
+        df: Stock data with a Ticker column
+
+    Returns:
+        DataFrame with the three classification columns added
+    """
+    from core.classifications import get_stock_classification
+
+    ticker_col = Column.TICKER.value
+    if ticker_col not in df.columns:
+        return df
+
+    unknown = "Unclassified"
+    lookup = {}
+    for ticker in df[ticker_col].dropna().unique():
+        classification = get_stock_classification(ticker)
+        if classification is None:
+            lookup[ticker] = (unknown, unknown, unknown)
+        else:
+            lookup[ticker] = (
+                classification.sector.value,
+                classification.industry.value,
+                classification.sub_industry.value,
+            )
+
+    df = df.copy()
+    tickers = df[ticker_col]
+    df[Column.SECTOR.value] = tickers.map(lambda t: lookup.get(t, (unknown,) * 3)[0])
+    df[Column.INDUSTRY.value] = tickers.map(lambda t: lookup.get(t, (unknown,) * 3)[1])
+    df[Column.SUB_INDUSTRY.value] = tickers.map(
+        lambda t: lookup.get(t, (unknown,) * 3)[2]
+    )
+    return df
+
+
+def latest_row_per_ticker(df: pd.DataFrame) -> pd.DataFrame:
+    """One row per ticker: the highest Index, i.e. its latest reported quarter.
+
+    Peer comparisons are between companies, so they need one observation each.
+    Ranking every ticker-quarter row instead lets a ticker with 60 quarters of
+    history outvote one with 20, and produces "ranks" far larger than the
+    number of companies.
+    """
+    ticker_col = Column.TICKER.value
+    index_col = Column.INDEX.value
+    if ticker_col not in df.columns:
+        return df
+    if index_col not in df.columns:
+        return df.groupby(ticker_col, sort=False).tail(1)
+    return df.loc[df.groupby(ticker_col, sort=False)[index_col].idxmax()]
+
+
+def calculate_sector_rankings(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Rank each ticker against its sector peers on key metrics.
+
+    The rank is a property of the company, computed from its latest reported
+    quarter and against the other tickers' latest quarters. It is then repeated
+    on every row of that ticker, so it reads the same wherever it is joined --
+    it is deliberately not a per-quarter time series.
+
+    Args:
+        df: Stock data with calculated metrics, including a Sector column
 
     Returns:
         DataFrame with sector ranking columns added
     """
     sector_col = Column.SECTOR.value
-    if sector_col not in df.columns:
+    ticker_col = Column.TICKER.value
+    if sector_col not in df.columns or ticker_col not in df.columns:
         return df
 
     df_with_rankings = df.copy()
+    latest = latest_row_per_ticker(df_with_rankings)
 
     positive_metrics = DerivedMetric.positive_ranking_metrics()
     negative_metrics = DerivedMetric.negative_ranking_metrics()
-
     invalid_sectors = DataQuality.invalid_values()
 
     for metric in positive_metrics + negative_metrics:
-        if metric in df.columns:
-            ranking_col = RankingSuffix.SECTOR_RANK.column_name(metric)
-            df_with_rankings[ranking_col] = np.nan
+        if metric not in df.columns:
+            continue
 
-            for sector in df[sector_col].unique():
-                if sector in invalid_sectors:
-                    continue
+        ranking_col = RankingSuffix.SECTOR_RANK.column_name(metric)
+        ranks_by_ticker = {}
 
-                sector_mask = df_with_rankings[sector_col] == sector
-                sector_data = df_with_rankings[sector_mask][metric].dropna()
+        for sector in latest[sector_col].dropna().unique():
+            if sector in invalid_sectors:
+                continue
 
-                if len(sector_data) > 1:
-                    if metric in positive_metrics:
-                        ranks = sector_data.rank(method="min", ascending=False)
-                    else:
-                        ranks = sector_data.rank(method="min", ascending=True)
+            peers = latest[latest[sector_col] == sector]
+            values = peers.set_index(ticker_col)[metric].dropna()
+            if len(values) <= 1:
+                continue
 
-                    df_with_rankings.loc[sector_mask, ranking_col] = ranks.reindex(
-                        df_with_rankings[sector_mask].index
-                    )
+            ranks = values.rank(method="min", ascending=metric in negative_metrics)
+            ranks_by_ticker.update(ranks.to_dict())
+
+        df_with_rankings[ranking_col] = df_with_rankings[ticker_col].map(
+            ranks_by_ticker
+        )
 
     return df_with_rankings
 
 
 def calculate_outperformance_ratios(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Calculate outperformance ratios vs sector and overall market averages.
+    Compare each ticker against its sector and the whole market.
+
+    Like the sector ranks, the benchmark is built from one row per ticker (its
+    latest quarter), not from every historical row -- a row-weighted average
+    lets long-history tickers dominate and is not the "average ticker" the
+    figure is read as.
+
+    Metrics already expressed in percent are reported as a percentage-point
+    difference (``_MarketGapPP`` / ``_SectorGapPP``). Level metrics keep the
+    ratio form (``_MarketOutperf`` / ``_SectorOutperf``), where 100 means
+    average.
 
     Args:
         df: Stock data with calculated metrics
 
     Returns:
-        DataFrame with outperformance ratio columns added
+        DataFrame with outperformance columns added
     """
     df_with_outperf = df.copy()
     sector_col = Column.SECTOR.value
+    ticker_col = Column.TICKER.value
+
+    if ticker_col not in df.columns:
+        return df_with_outperf
 
     metrics = [
         DerivedMetric.PRICE_QOQ.value,
@@ -526,39 +608,65 @@ def calculate_outperformance_ratios(df: pd.DataFrame) -> pd.DataFrame:
         DerivedMetric.EPS_TTM.value,
         DerivedMetric.REVENUE_TTM.value,
     ]
-
+    percent_metrics = DerivedMetric.percent_unit_metrics()
     invalid_sectors = DataQuality.invalid_values()
+
+    latest = latest_row_per_ticker(df_with_outperf)
 
     for metric in metrics:
         if metric not in df.columns:
             continue
 
-        # Market outperformance
-        market_avg = df[metric].mean()
-        market_outperf_col = RankingSuffix.MARKET_OUTPERF.column_name(metric)
-        df_with_outperf[market_outperf_col] = (
-            (df[metric] / market_avg) * 100 if market_avg != 0 else np.nan
+        as_pp = metric in percent_metrics
+        market_suffix = (
+            RankingSuffix.MARKET_GAP_PP if as_pp else RankingSuffix.MARKET_OUTPERF
+        )
+        sector_suffix = (
+            RankingSuffix.SECTOR_GAP_PP if as_pp else RankingSuffix.SECTOR_OUTPERF
         )
 
-        # Sector outperformance
-        if sector_col in df.columns:
-            sector_outperf_col = RankingSuffix.SECTOR_OUTPERF.column_name(metric)
-            df_with_outperf[sector_outperf_col] = np.nan
+        values = latest.set_index(ticker_col)[metric].dropna()
+        if values.empty:
+            continue
 
-            for sector in df[sector_col].unique():
-                if sector in invalid_sectors:
-                    continue
+        def compare(series, benchmark):
+            if pd.isna(benchmark):
+                return None
+            if as_pp:
+                return series - benchmark
+            if benchmark == 0:
+                return None
+            return (series / benchmark) * 100
 
-                sector_mask = df_with_outperf[sector_col] == sector
-                sector_avg = df_with_outperf[sector_mask][metric].mean()
+        market_result = compare(values, values.mean())
+        market_col = market_suffix.column_name(metric)
+        df_with_outperf[market_col] = (
+            df_with_outperf[ticker_col].map(market_result)
+            if market_result is not None
+            else np.nan
+        )
 
-                if sector_avg != 0 and not pd.isna(sector_avg):
-                    sector_outperf = (
-                        df_with_outperf.loc[sector_mask, metric] / sector_avg
-                    ) * 100
-                    df_with_outperf.loc[sector_mask, sector_outperf_col] = (
-                        sector_outperf
-                    )
+        sector_col_name = sector_suffix.column_name(metric)
+        df_with_outperf[sector_col_name] = np.nan
+        if sector_col not in latest.columns:
+            continue
+
+        sector_result = {}
+        sectors = latest.set_index(ticker_col)[sector_col]
+        for sector in sectors.dropna().unique():
+            if sector in invalid_sectors:
+                continue
+            members = [t for t in values.index if sectors.get(t) == sector]
+            if not members:
+                continue
+            peer_values = values[members]
+            compared = compare(peer_values, peer_values.mean())
+            if compared is not None:
+                sector_result.update(compared.to_dict())
+
+        df_with_outperf[sector_col_name] = df_with_outperf[ticker_col].map(
+            sector_result
+        )
 
     return df_with_outperf
 

@@ -41,13 +41,12 @@ import pandas as pd
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-# core.backtesting resolves config/ticker_strategy_mapping.json relative to the
-# working directory, so predictions silently change strategy if we run from
-# anywhere else. Anchor to the repo root before importing anything from core.
+# FilePaths resolves against the repo root now, so predictions no longer depend
+# on the working directory. Still anchored here so relative --output-dir
+# arguments and any stray relative path behave predictably.
 os.chdir(REPO_ROOT)
 sys.path.insert(0, str(REPO_ROOT))
 
-from core.backtesting import load_ticker_strategy_mapping  # noqa: E402
 from core.data_processing import (  # noqa: E402
     attach_classifications,
     calculate_downside_capture,
@@ -63,7 +62,6 @@ from core.enums import (  # noqa: E402
     FilePaths,
     Metric,
     RollingWindow,
-    Strategy,
 )
 from core.predictions import predict_next_eps  # noqa: E402
 
@@ -215,9 +213,7 @@ def clean(value):
     return value
 
 
-def build_ticker_snapshot(
-    panel: pd.DataFrame, strategy_mapping: dict | None
-) -> list[dict]:
+def build_ticker_snapshot(panel: pd.DataFrame) -> list[dict]:
     """One record per ticker with every number the dashboard surfaces."""
     ticker_col = Column.TICKER.value
     index_col = Column.INDEX.value
@@ -248,7 +244,7 @@ def build_ticker_snapshot(
             "qoq_summary": build_qoq_summary(data),
             "rolling_qoq_avg": build_rolling_averages(data),
             "peer_comparison": {},  # filled by attach_peer_comparison
-            "prediction": build_prediction(panel, ticker, strategy_mapping),
+            "prediction": build_prediction(panel, ticker),
         }
         for metric in LATEST_VALUE_METRICS:
             if metric not in data.columns:
@@ -475,21 +471,18 @@ def gap(value: float, average: float | None) -> float | None:
     return clean(value - average)
 
 
-def build_prediction(
-    panel: pd.DataFrame, ticker: str, strategy_mapping: dict | None
-) -> dict | None:
-    """Next-quarter EPS/TTM/price forecast for a ticker."""
+def build_prediction(panel: pd.DataFrame, ticker: str) -> dict | None:
+    """Next-quarter EPS/TTM/price forecast for a ticker.
+
+    predict_next_eps reports the strategy it used and where that choice came
+    from, so this no longer re-derives them from the mapping file -- which
+    predictions stopped reading when per-ticker selection was retired.
+    """
     prediction = predict_next_eps(panel, ticker)
     if prediction is None:
         return None
 
-    result = {key: clean(value) for key, value in prediction.items()}
-    mapping = strategy_mapping or {}
-    result["strategy"] = mapping.get(ticker, Strategy.WEIGHTED_GROWTH.value)
-    result["strategy_source"] = (
-        "backtested_optimal" if ticker in mapping else "default_fallback"
-    )
-    return result
+    return {key: clean(value) for key, value in prediction.items()}
 
 
 # ---------------------------------------------------------------------------
@@ -692,11 +685,16 @@ def build_data_dictionary() -> dict:
             "warnings": "Plain-text explanation of each flag that is set.",
         },
         "prediction_fields": {
-            "strategy": "Backtested per-ticker strategy used for the forecast.",
+            "strategy": "The strategy that produced this forecast.",
             "strategy_source": (
-                "backtested_optimal when config/ticker_strategy_mapping.json "
-                "names a strategy for the ticker, else default_fallback "
-                "(weighted_growth)."
+                "global_default for every ticker: per-ticker selection was "
+                "retired after losing to a single global default out-of-sample "
+                "on two independent windows. See StrategyPolicy in "
+                "core/enums.py."
+            ),
+            "eps_crosses_zero": (
+                "True when recent EPS changes sign, which makes every growth "
+                "rate behind the forecast unstable. Reported, not suppressed."
             ),
             "methodology": "Human-readable description of the strategy.",
             "latest_eps": "Most recent actual quarterly EPS, the forecast base.",
@@ -984,14 +982,7 @@ def main() -> int:
         f"{panel[Column.TICKER.value].nunique()} tickers"
     )
 
-    strategy_mapping = load_ticker_strategy_mapping()
-    if strategy_mapping is None:
-        print(
-            "Warning: config/ticker_strategy_mapping.json not loaded - "
-            "every forecast falls back to weighted_growth."
-        )
-
-    snapshot = build_ticker_snapshot(panel, strategy_mapping)
+    snapshot = build_ticker_snapshot(panel)
     forecasts = sum(1 for record in snapshot if record["prediction"] is not None)
     print(f"Snapshot: {len(snapshot)} tickers, {forecasts} with a forecast")
 

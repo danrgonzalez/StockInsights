@@ -297,10 +297,9 @@ for ticker in ["AAPL", "MSFT", "GOOGL"]:
         print(f"{ticker}: ${prediction['predicted_eps']:.2f} ({prediction['confidence']})")
 ```
 
-> **Note:** `predict_next_eps` reads `config/ticker_strategy_mapping.json` by a
-> path relative to the **current working directory**. Run from the repo root, or
-> the per-ticker strategy silently falls back to `weighted_growth` while still
-> reporting "backtested optimal".
+> **Note:** all forecasts use a single global strategy, `weighted_growth`. See
+> [Prediction Strategies](#prediction-strategies) for why per-ticker selection
+> was retired.
 
 ### Option 5: Export every computed metric to a file
 
@@ -341,8 +340,8 @@ limitations noted above:
 
 - The exporter joins `core/classifications.py` onto the DataFrame, so sector
   comparisons are populated rather than inert.
-- It `chdir`s to the repo root before predicting, so the per-ticker strategy
-  mapping always loads and forecasts do not depend on where you ran it from.
+- `FilePaths` resolves against the repo root, so forecasts no longer depend on
+  the directory you ran from.
 
 Its `peer_comparison` block also ranks each ticker's latest quarter against
 other tickers' latest quarters, which is what a sector rank is normally read as.
@@ -399,7 +398,7 @@ StockInsights/
 │   └── quotes/                   # Optional price data directory
 │
 ├── config/                        # Configuration files
-│   └── ticker_strategy_mapping.json  # Optimal strategies per ticker
+│   └── ticker_strategy_mapping.json  # Research artifact; not read by predictions
 │
 ├── requirements.txt              # Production dependencies
 ├── requirements-dev.txt          # Development dependencies
@@ -541,7 +540,7 @@ prediction = predict_next_eps(df, "AAPL")
 
 ## Prediction Strategies
 
-The system uses backtested optimal strategies per ticker:
+All forecasts use one global strategy: **`weighted_growth`**.
 
 | Strategy        | Description                                        |
 |-----------------|---------------------------------------------------|
@@ -551,7 +550,41 @@ The system uses backtested optimal strategies per ticker:
 | trend_analysis  | Linear regression extrapolation                   |
 | momentum        | Exponentially weighted recent performance         |
 
-Run `python multi_ticker_backtest.py` to optimize strategies for your data.
+### Why not a strategy per ticker?
+
+The app used to pick a "backtested optimal" strategy per ticker from
+`config/ticker_strategy_mapping.json`. That was tested properly on 2026-09-05:
+the strategy was chosen on one 8-quarter window and scored on the **next**, so
+nothing from the scoring window informed the choice. It lost to a single global
+default on two independent windows.
+
+| Window | Per-ticker | Always `weighted_growth` | Head to head |
+|--------|-----------|--------------------------|--------------|
+| latest 8 quarters | 53.27 | **50.59** | 22 better, 54 worse (p = 0.0002) |
+| quarters −16..−9  | 71.13 | **67.82** | 21 better, 54 worse (p = 0.0001) |
+
+Lower scores are better. The selection-window winner repeated out-of-sample only
+39% of the time (chance is 20%), and the median margin between the best and
+second-best strategy was 2.0% over 8 observations — it was fitting noise, and the
+accuracy it advertised was in-sample. Even a cheating oracle with perfect
+foresight beat the global default by only 11%, so there was little available to
+win in the first place.
+
+The mapping file is still written by the multi-ticker backtest as a research
+artifact, but predictions no longer read it. Set
+`StrategyPolicy.USE_TICKER_MAPPING = True` in `core/enums.py` to restore the old
+behaviour.
+
+### Tickers whose EPS crosses zero
+
+Percent growth across a sign change is not meaningful, and the ±200% outlier
+filter discards most such observations. 17 tickers are affected. They still get
+a forecast — if the chosen strategy cannot fit one, the remaining strategies are
+tried in order — but the methodology string carries an explicit caution, e.g.
+
+```
+Weighted Growth (global default) — caution: EPS crosses zero, growth rates are unstable
+```
 
 ## Troubleshooting
 

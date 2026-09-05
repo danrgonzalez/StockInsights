@@ -20,6 +20,7 @@ from core.enums import (
     Metric,
     PredictionKey,
     Strategy,
+    StrategyPolicy,
 )
 from core.strategies import get_all_strategies
 
@@ -532,6 +533,7 @@ def load_ticker_strategy_mapping(
 STRATEGY_SOURCE_BACKTESTED = "backtested"
 STRATEGY_SOURCE_DEFAULT = "default"
 STRATEGY_SOURCE_MAPPING_UNAVAILABLE = "mapping_unavailable"
+STRATEGY_SOURCE_GLOBAL_DEFAULT = "global_default"
 
 
 def get_ticker_strategy_with_source(
@@ -551,10 +553,17 @@ def get_ticker_strategy_with_source(
         STRATEGY_SOURCE_* constants.
     """
     if default_strategy is None:
-        default_strategy = Strategy.SEASONAL.value
+        default_strategy = StrategyPolicy.GLOBAL_DEFAULT
 
+    # Per-ticker selection lost to this single default out-of-sample on two
+    # independent windows -- see StrategyPolicy for the numbers. The mapping is
+    # only consulted when explicitly re-enabled or handed in by a caller.
     mapping_supplied = ticker_strategy_mapping is not None
     if not mapping_supplied:
+        if not StrategyPolicy.USE_TICKER_MAPPING:
+            if verbose:
+                print(f"Using global default strategy {default_strategy}")
+            return default_strategy, STRATEGY_SOURCE_GLOBAL_DEFAULT
         ticker_strategy_mapping = load_ticker_strategy_mapping(verbose=verbose)
 
     if ticker_strategy_mapping and ticker in ticker_strategy_mapping:

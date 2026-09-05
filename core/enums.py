@@ -38,6 +38,45 @@ class Strategy(str, Enum):
         return [s.value for s in cls]
 
 
+class StrategyPolicy:
+    """How a prediction strategy is chosen for a ticker.
+
+    Per-ticker "backtested optimal" selection was tested out-of-sample on
+    2026-09-05 over two independent 8-quarter windows: the strategy was chosen
+    on one window and scored on the next, so nothing from the scoring window
+    informed the choice. It lost to a single global default both times.
+
+        window A (latest 8q):  per-ticker 53.27 vs weighted_growth 50.59
+                               22 tickers better, 54 worse (p = 0.0002)
+        window B (-16..-9):    per-ticker 71.13 vs weighted_growth 67.82
+                               21 tickers better, 54 worse (p = 0.0001)
+
+    Lower is better. The selection-window winner repeated out-of-sample only
+    39% of the time, and the median margin between best and second-best was
+    2.0% over 8 observations -- the mapping was fitting noise, and the accuracy
+    it reported was in-sample. Even a cheating oracle with perfect foresight
+    was only 11% better than the global default, so there was little to win.
+
+    ``config/ticker_strategy_mapping.json`` is kept as a research artifact that
+    the multi-ticker backtest still writes, but predictions no longer read it.
+    Set USE_TICKER_MAPPING to True to restore the old behaviour.
+    """
+
+    GLOBAL_DEFAULT = Strategy.WEIGHTED_GROWTH.value
+    USE_TICKER_MAPPING = False
+
+    # Tried in order when the chosen strategy cannot fit a ticker, so one
+    # unusable strategy does not mean no forecast at all (INTC's EPS crosses
+    # zero, which only the seasonal strategy cannot handle).
+    FALLBACK_ORDER = [
+        Strategy.WEIGHTED_GROWTH.value,
+        Strategy.SIMPLE_AVERAGE.value,
+        Strategy.MOMENTUM.value,
+        Strategy.TREND_ANALYSIS.value,
+        Strategy.SEASONAL.value,
+    ]
+
+
 class Confidence(str, Enum):
     """Prediction confidence levels based on data availability."""
 
@@ -488,6 +527,11 @@ class PredictionKey:
     DATA_POINTS = "data_points"
     METHODOLOGY = "methodology"
     NEXT_INDEX = "next_index"
+    # The strategy actually used and where the choice came from. Reported so
+    # consumers read what ran rather than re-deriving it from a config file.
+    STRATEGY = "strategy"
+    STRATEGY_SOURCE = "strategy_source"
+    EPS_CROSSES_ZERO = "eps_crosses_zero"
 
     # Strategy-specific
     GROWTH_4Q = "growth_4q"

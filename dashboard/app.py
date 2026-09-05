@@ -447,6 +447,17 @@ def main():
         st.subheader("🔮 EPS Prediction")
         prediction = predict_next_eps(df, selected_ticker)
         if prediction:
+            # Surface this outside the methodology expander: every growth rate
+            # behind the forecast is unstable when EPS changes sign, and the
+            # number looks just as confident either way.
+            if prediction.get("eps_crosses_zero"):
+                st.warning(
+                    f"{selected_ticker}'s EPS crosses zero in recent quarters. "
+                    "Percent growth across a sign change is not meaningful and "
+                    "most such quarters are dropped by the outlier filter, so "
+                    "this forecast rests on very little. Treat it as indicative."
+                )
+
             # All EPS prediction metrics in one compact row
             st.markdown("**Next Quarter EPS Scenarios:**")
             col1, col2, col3, col4, col5, col6, col7, col8 = st.columns(8)

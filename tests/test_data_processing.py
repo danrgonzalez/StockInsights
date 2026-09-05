@@ -11,6 +11,10 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from core.backtesting import (
+    STRATEGY_SOURCE_GLOBAL_DEFAULT,
+    get_ticker_strategy_with_source,
+)
 from core.data_processing import (
     attach_classifications,
     calculate_outperformance_ratios,
@@ -21,7 +25,8 @@ from core.data_processing import (
     report_range,
     report_sort_key,
 )
-from core.enums import RollingWindow, Thresholds
+from core.enums import RollingWindow, StrategyPolicy, Thresholds
+from core.predictions import predict_next_eps
 
 
 def build_panel(eps, revenue=None, price=None, div=None, ticker="TEST"):
@@ -383,3 +388,103 @@ class TestPeerComparison:
         out = attach_classifications(df)
 
         assert (out["Sector"] == "Unclassified").all()
+
+
+class TestStrategyPolicy:
+    """Items 21 and 22: one global strategy, with an explicit fallback."""
+
+    @staticmethod
+    def growing_panel(ticker="TEST"):
+        return calculate_qoq_changes(
+            build_panel([1.0 * (1.05**i) for i in range(16)], ticker=ticker)
+        )
+
+    def test_strategy_source_is_the_global_default(self):
+        """Per-ticker mapping lost out-of-sample and is no longer consulted."""
+        strategy, source = get_ticker_strategy_with_source("AAPL")
+
+        assert source == STRATEGY_SOURCE_GLOBAL_DEFAULT
+        assert strategy == StrategyPolicy.GLOBAL_DEFAULT
+
+    def test_every_ticker_gets_the_same_strategy(self):
+        picks = {
+            get_ticker_strategy_with_source(t)[0]
+            for t in ("AAPL", "INTC", "KO", "ZZZZ")
+        }
+        assert picks == {StrategyPolicy.GLOBAL_DEFAULT}
+
+    def test_an_explicit_mapping_is_still_honoured(self):
+        """Callers may still pass one in; only the implicit lookup was dropped."""
+        strategy, source = get_ticker_strategy_with_source(
+            "AAPL", ticker_strategy_mapping={"AAPL": "seasonal"}
+        )
+
+        assert strategy == "seasonal"
+        assert source != STRATEGY_SOURCE_GLOBAL_DEFAULT
+
+    def test_prediction_reports_the_strategy_it_used(self):
+        prediction = predict_next_eps(self.growing_panel(), "TEST")
+
+        assert prediction is not None
+        assert prediction["strategy"] == StrategyPolicy.GLOBAL_DEFAULT
+        assert prediction["strategy_source"] == STRATEGY_SOURCE_GLOBAL_DEFAULT
+
+    def test_methodology_no_longer_claims_backtested_optimal(self):
+        prediction = predict_next_eps(self.growing_panel(), "TEST")
+
+        assert "backtested optimal" not in prediction["methodology"]
+        assert "global default" in prediction["methodology"]
+
+    def test_fallback_order_covers_every_strategy(self):
+        from core.strategies import STRATEGIES
+
+        assert set(StrategyPolicy.FALLBACK_ORDER) == set(STRATEGIES)
+
+
+class TestZeroCrossingEps:
+    """Item 22: a sign change makes growth rates meaningless -- say so."""
+
+    @staticmethod
+    def crossing_panel():
+        eps = [
+            0.41,
+            0.54,
+            0.18,
+            0.02,
+            -0.46,
+            0.13,
+            0.13,
+            -0.10,
+            0.23,
+            0.15,
+            0.29,
+            0.42,
+            0.31,
+            0.25,
+            0.38,
+            0.44,
+        ]
+        return calculate_qoq_changes(build_panel(eps, ticker="CROSS"))
+
+    def test_zero_crossing_is_flagged(self):
+        prediction = predict_next_eps(self.crossing_panel(), "CROSS")
+
+        assert prediction is not None
+        assert prediction["eps_crosses_zero"] is True
+        assert "crosses zero" in prediction["methodology"]
+
+    def test_steady_eps_is_not_flagged(self):
+        steady = calculate_qoq_changes(
+            build_panel([1.0 * (1.05**i) for i in range(16)], ticker="STEADY")
+        )
+        prediction = predict_next_eps(steady, "STEADY")
+
+        assert prediction["eps_crosses_zero"] is False
+        assert "crosses zero" not in prediction["methodology"]
+
+    def test_a_zero_crossing_ticker_still_gets_a_forecast(self):
+        """It used to get none at all, because its mapped strategy could not fit."""
+        prediction = predict_next_eps(self.crossing_panel(), "CROSS")
+
+        assert prediction is not None
+        assert prediction["predicted_eps"] is not None

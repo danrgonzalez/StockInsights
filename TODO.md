@@ -50,27 +50,6 @@ within two weeks. Long-range extrapolation is structurally sound but unverifiabl
 
 ---
 
-## Strategy / method
-
-### 21. The per-ticker strategy mapping is stale and likely fits noise
-Re-backtesting the first 25 tickers: the stored choice is no longer the winner for
-**10 of 25**, and the median margin between best and second-best is **2.2%** over 8
-observations (AAPL: 0.1%). The same 8 quarters both select the strategy and back the
-"backtested optimal" claim, so the reported accuracy is in-sample.
-
-- [ ] Decide: hold out the selection window, or require a minimum margin before
-      deviating from a single global default. This is a method decision, not a bug fix.
-
-### 22. `INTC` produces no prediction
-Its EPS crosses zero repeatedly, so every YoY growth exceeds the ±200% outlier filter
-and the seasonal strategy has nothing to fit. Pre-existing behaviour; the app shows an
-info message.
-
-- [ ] Decide whether zero-crossing EPS deserves a dedicated strategy or an explicit
-      "not predictable" state.
-
----
-
 ## Local environment — git tooling
 
 Machine-level issues, not repo issues. They blocked the 2026-09-02 push to origin and
@@ -87,6 +66,40 @@ works only via `gh` over https.
 ---
 
 ## Done — 2026-09-05
+
+- [x] **Item 21 — decided: retire per-ticker selection, use one global default.**
+      Tested properly rather than assumed: the strategy was chosen on one 8-quarter
+      window and scored on the **next**, so nothing from the scoring window informed
+      the choice. Per-ticker selection lost on two independent windows.
+
+      | Window | Per-ticker | Always `weighted_growth` | Head to head |
+      |--------|-----------|--------------------------|--------------|
+      | latest 8q | 53.27 | **50.59** | 22 better, 54 worse (p = 0.0002) |
+      | −16..−9   | 71.13 | **67.82** | 21 better, 54 worse (p = 0.0001) |
+
+      Lower is better. The selection-window winner repeated out-of-sample only **39%**
+      of the time (chance 20%), and the median best-vs-second margin was **2.0%** over
+      8 observations. A cheating oracle with perfect foresight beat the global default
+      by only 11%, so there was little to win even in principle — and the stored
+      mapping's apparent edge is in-sample contamination, since it was fitted on data
+      overlapping the evaluation window. Implemented as `StrategyPolicy` in
+      `core/enums.py` (carrying these numbers); predictions no longer read
+      `config/ticker_strategy_mapping.json`, which stays as a research artifact the
+      multi-ticker backtest still writes. `USE_TICKER_MAPPING = True` restores the old
+      behaviour. **This changes forecasts** — AAPL moves from $2.92 (seasonal) to
+      $2.22 (weighted_growth).
+- [x] **Item 22 — decided: neither a dedicated strategy nor silence.** INTC had no
+      forecast *only* because the mapping assigned it `seasonal`, the one strategy
+      that cannot fit a zero-crossing EPS series; four others handle it. Item 21 fixes
+      that for free. Added a fallback chain so one unusable strategy never means no
+      forecast, and an explicit `eps_crosses_zero` flag surfaced three ways: a
+      `st.warning` above the prediction (not buried in an expander), a clause in the
+      methodology string, and a field in the export. **All 137 tickers now forecast**,
+      up from 136; 17 are flagged for zero-crossing EPS. `BA` exercises the fallback:
+      "Momentum — fell back from Weighted Growth (global default), which could not fit
+      this ticker — caution: EPS crosses zero…". `predict_next_eps` now also reports
+      `strategy` and `strategy_source`, so the exporter reads what actually ran
+      instead of re-deriving it from a config file predictions no longer consult.
 
 - [x] **Item 15** — all three parts. `.claude/settings.local.json` untracked and
       gitignored (still in public history; not worth a rewrite for tool permissions

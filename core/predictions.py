@@ -6,7 +6,27 @@ This module provides earnings prediction functionality without UI dependencies.
 
 import pandas as pd
 
-from core.enums import Column, DerivedMetric, Metric, PredictionKey, Strategy
+from core.enums import (
+    Column,
+    DerivedMetric,
+    Metric,
+    PredictionKey,
+    StrategyPolicy,
+)
+
+
+def _eps_crosses_zero(ticker_data: pd.DataFrame, quarters: int = 12) -> bool:
+    """Whether recent EPS changes sign.
+
+    Growth rates across a sign change are not interpretable, and the ±200%
+    outlier filter discards most of them, so any forecast for such a ticker
+    rests on very little.
+    """
+    eps = ticker_data[Metric.EPS.value].dropna().tail(quarters)
+    if len(eps) < 2:
+        return False
+    signs = eps.gt(0)
+    return bool(signs.nunique() > 1)
 
 
 def predict_next_eps(df: pd.DataFrame, ticker: str) -> dict | None:
@@ -26,6 +46,7 @@ def predict_next_eps(df: pd.DataFrame, ticker: str) -> dict | None:
     """
     from core.backtesting import (
         STRATEGY_SOURCE_BACKTESTED,
+        STRATEGY_SOURCE_GLOBAL_DEFAULT,
         STRATEGY_SOURCE_MAPPING_UNAVAILABLE,
         get_ticker_strategy_with_source,
     )
@@ -37,15 +58,28 @@ def predict_next_eps(df: pd.DataFrame, ticker: str) -> dict | None:
     ticker_data = df[df[ticker_col] == ticker].copy()
     ticker_data = ticker_data.sort_values(index_col)
 
-    # Get the optimal strategy for this specific ticker
+    # Choose the strategy for this ticker
     optimal_strategy_name, strategy_source = get_ticker_strategy_with_source(
-        ticker, default_strategy=Strategy.WEIGHTED_GROWTH.value
+        ticker, default_strategy=StrategyPolicy.GLOBAL_DEFAULT
     )
-    optimal_strategy_func = get_strategy(optimal_strategy_name)
+    basic_prediction = get_strategy(optimal_strategy_name)(ticker_data)
 
-    # Get basic prediction from optimal strategy
-    basic_prediction = optimal_strategy_func(ticker_data)
+    # One strategy failing is not the same as a ticker being unpredictable.
+    # INTC's EPS crosses zero, which only the seasonal strategy cannot fit --
+    # while it was INTC's mapped strategy, the ticker silently had no forecast
+    # at all even though four other strategies handle it fine.
+    fallback_from = None
+    if basic_prediction is None:
+        for candidate in StrategyPolicy.FALLBACK_ORDER:
+            if candidate == optimal_strategy_name:
+                continue
+            basic_prediction = get_strategy(candidate)(ticker_data)
+            if basic_prediction is not None:
+                fallback_from = optimal_strategy_name
+                optimal_strategy_name = candidate
+                break
 
+    # Genuinely not predictable: no strategy could fit this ticker.
     if basic_prediction is None:
         return None
 
@@ -172,21 +206,42 @@ def predict_next_eps(df: pd.DataFrame, ticker: str) -> dict | None:
                         (worst_case_price - current_price) / abs(current_price)
                     ) * 100
 
-    # Build methodology string. Only claim "backtested optimal" when the strategy
-    # actually came from the backtested mapping -- otherwise say which fallback
-    # produced the number, so an unreadable mapping cannot masquerade as a
-    # per-ticker result.
+    # Build methodology string. It has to say where the strategy came from: the
+    # old string claimed "backtested optimal" unconditionally, including when
+    # the mapping had not loaded at all.
     strategy_display = optimal_strategy_name.replace("_", " ").title()
-    if strategy_source == STRATEGY_SOURCE_BACKTESTED:
+    if fallback_from is not None:
+        # The label belongs to the strategy that was chosen, not the one that
+        # actually ran, so describe the substitution rather than mislabelling it.
+        chosen_display = fallback_from.replace("_", " ").title()
+        chosen_origin = (
+            "global default"
+            if strategy_source == STRATEGY_SOURCE_GLOBAL_DEFAULT
+            else "selected"
+        )
+        methodology = (
+            f"{strategy_display} — fell back from {chosen_display} "
+            f"({chosen_origin}), which could not fit this ticker"
+        )
+    elif strategy_source == STRATEGY_SOURCE_BACKTESTED:
         methodology = f"Ticker-specific {strategy_display} (backtested optimal)"
     elif strategy_source == STRATEGY_SOURCE_MAPPING_UNAVAILABLE:
         methodology = (
             f"{strategy_display} (default; backtested strategy mapping unavailable)"
         )
+    elif strategy_source == STRATEGY_SOURCE_GLOBAL_DEFAULT:
+        methodology = f"{strategy_display} (global default)"
     else:
         methodology = (
             f"{strategy_display} (default; no backtested strategy for {ticker})"
         )
+
+    # EPS changing sign makes every growth rate in these strategies unstable:
+    # percent change across zero is not meaningful, so the number is reported
+    # but should not be leaned on.
+    crosses_zero = _eps_crosses_zero(ticker_data)
+    if crosses_zero:
+        methodology += " — caution: EPS crosses zero, growth rates are unstable"
 
     # Add the enhanced predictions to the result
     prediction.update(
@@ -208,6 +263,9 @@ def predict_next_eps(df: pd.DataFrame, ticker: str) -> dict | None:
             PredictionKey.WORST_CASE_PRICE_GROWTH: worst_case_price_growth,
             PredictionKey.NEXT_INDEX: ticker_data[index_col].max() + 1,
             PredictionKey.METHODOLOGY: methodology,
+            PredictionKey.STRATEGY: optimal_strategy_name,
+            PredictionKey.STRATEGY_SOURCE: strategy_source,
+            PredictionKey.EPS_CROSSES_ZERO: crosses_zero,
         }
     )
 

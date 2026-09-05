@@ -24,7 +24,11 @@ def predict_next_eps(df: pd.DataFrame, ticker: str) -> dict | None:
         Prediction results with comprehensive scenarios, or None if
         insufficient data
     """
-    from core.backtesting import get_ticker_strategy
+    from core.backtesting import (
+        STRATEGY_SOURCE_BACKTESTED,
+        STRATEGY_SOURCE_MAPPING_UNAVAILABLE,
+        get_ticker_strategy_with_source,
+    )
     from core.strategies import get_strategy
 
     ticker_col = Column.TICKER.value
@@ -34,7 +38,7 @@ def predict_next_eps(df: pd.DataFrame, ticker: str) -> dict | None:
     ticker_data = ticker_data.sort_values(index_col)
 
     # Get the optimal strategy for this specific ticker
-    optimal_strategy_name = get_ticker_strategy(
+    optimal_strategy_name, strategy_source = get_ticker_strategy_with_source(
         ticker, default_strategy=Strategy.WEIGHTED_GROWTH.value
     )
     optimal_strategy_func = get_strategy(optimal_strategy_name)
@@ -168,9 +172,21 @@ def predict_next_eps(df: pd.DataFrame, ticker: str) -> dict | None:
                         (worst_case_price - current_price) / abs(current_price)
                     ) * 100
 
-    # Build methodology string
+    # Build methodology string. Only claim "backtested optimal" when the strategy
+    # actually came from the backtested mapping -- otherwise say which fallback
+    # produced the number, so an unreadable mapping cannot masquerade as a
+    # per-ticker result.
     strategy_display = optimal_strategy_name.replace("_", " ").title()
-    methodology = f"Ticker-specific {strategy_display} (backtested optimal)"
+    if strategy_source == STRATEGY_SOURCE_BACKTESTED:
+        methodology = f"Ticker-specific {strategy_display} (backtested optimal)"
+    elif strategy_source == STRATEGY_SOURCE_MAPPING_UNAVAILABLE:
+        methodology = (
+            f"{strategy_display} (default; backtested strategy mapping unavailable)"
+        )
+    else:
+        methodology = (
+            f"{strategy_display} (default; no backtested strategy for {ticker})"
+        )
 
     # Add the enhanced predictions to the result
     prediction.update(

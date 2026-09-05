@@ -527,6 +527,54 @@ def load_ticker_strategy_mapping(
         return None
 
 
+# Where a ticker's strategy came from. Callers that report a methodology need to
+# know whether the choice was actually backtested or is just the default.
+STRATEGY_SOURCE_BACKTESTED = "backtested"
+STRATEGY_SOURCE_DEFAULT = "default"
+STRATEGY_SOURCE_MAPPING_UNAVAILABLE = "mapping_unavailable"
+
+
+def get_ticker_strategy_with_source(
+    ticker, ticker_strategy_mapping=None, default_strategy=None, verbose=False
+):
+    """
+    Get the best strategy for a ticker along with where the choice came from.
+
+    Args:
+        ticker: Stock ticker symbol
+        ticker_strategy_mapping: Pre-loaded mapping
+        default_strategy: Fallback strategy if ticker not found
+        verbose: Whether to print status messages (default: False)
+
+    Returns:
+        tuple[str, str]: (strategy name, source) where source is one of the
+        STRATEGY_SOURCE_* constants.
+    """
+    if default_strategy is None:
+        default_strategy = Strategy.SEASONAL.value
+
+    mapping_supplied = ticker_strategy_mapping is not None
+    if not mapping_supplied:
+        ticker_strategy_mapping = load_ticker_strategy_mapping(verbose=verbose)
+
+    if ticker_strategy_mapping and ticker in ticker_strategy_mapping:
+        return ticker_strategy_mapping[ticker], STRATEGY_SOURCE_BACKTESTED
+
+    # Distinguish "the mapping does not cover this ticker" from "the mapping
+    # could not be read at all" -- the second is a deployment problem, and used
+    # to be invisible because both fell through to the same default.
+    if ticker_strategy_mapping is None:
+        source = STRATEGY_SOURCE_MAPPING_UNAVAILABLE
+        if verbose:
+            print(f"Strategy mapping unavailable, using {default_strategy}")
+    else:
+        source = STRATEGY_SOURCE_DEFAULT
+        if verbose:
+            print(f"No specific strategy for {ticker}, using {default_strategy}")
+
+    return default_strategy, source
+
+
 def get_ticker_strategy(
     ticker, ticker_strategy_mapping=None, default_strategy=None, verbose=False
 ):
@@ -542,19 +590,13 @@ def get_ticker_strategy(
     Returns:
         str: Best strategy name for the ticker
     """
-    if default_strategy is None:
-        default_strategy = Strategy.SEASONAL.value
-
-    if ticker_strategy_mapping is None:
-        ticker_strategy_mapping = load_ticker_strategy_mapping(verbose=verbose)
-
-    if ticker_strategy_mapping and ticker in ticker_strategy_mapping:
-        return ticker_strategy_mapping[ticker]
-
-    # Fallback to default strategy
-    if verbose:
-        print(f"No specific strategy for {ticker}, using {default_strategy}")
-    return default_strategy
+    strategy, _ = get_ticker_strategy_with_source(
+        ticker,
+        ticker_strategy_mapping=ticker_strategy_mapping,
+        default_strategy=default_strategy,
+        verbose=verbose,
+    )
+    return strategy
 
 
 def display_detailed_ticker_results(ticker_results, top_n=10):

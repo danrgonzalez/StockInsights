@@ -20,6 +20,31 @@ from core.enums import (
 )
 
 
+def report_sort_key(label: str) -> tuple[int, int]:
+    """Sort key for a fiscal quarter label such as ``Q3'25``.
+
+    Report labels sort wrongly as plain strings -- the quarter leads, so
+    ``Q1'26`` lands below ``Q4'10``. This returns ``(year, quarter)`` instead.
+
+    Two-digit years are read as 20xx, which covers the whole panel (2010
+    through the fiscal-year-ahead 2027 labels). Anything unparseable sorts
+    last rather than raising, so a stray label cannot break a sidebar.
+    """
+    text = str(label).strip()
+    try:
+        quarter = int(text[1])
+        year = int(text.split("'")[1])
+    except (IndexError, ValueError):
+        return (9999, 9)
+    return (2000 + year if year < 100 else year, quarter)
+
+
+def report_range(reports: pd.Series) -> tuple[str | None, str | None]:
+    """Earliest and latest fiscal quarter label, ordered by (year, quarter)."""
+    labels = sorted({str(label) for label in reports.dropna()}, key=report_sort_key)
+    return (labels[0], labels[-1]) if labels else (None, None)
+
+
 def load_stock_data(file_path: str) -> pd.DataFrame | None:
     """
     Load and clean stock data from an Excel file.
@@ -330,8 +355,12 @@ def _calculate_dividend_growth(
             )
             df_with_qoq.loc[ticker_mask, avg_col] = avg_increase_rate
     else:
+        # Fewer than two detected dividend changes means growth cannot be
+        # measured. Leave it NaN -- 0.0 here was indistinguishable from a real
+        # zero-growth dividend, and made current payers look like they had
+        # frozen their dividend.
         growth_col = DerivedMetric.DIVIDEND_GROWTH_RATE.value
-        df_with_qoq.loc[ticker_mask, growth_col] = 0.0
+        df_with_qoq.loc[ticker_mask, growth_col] = np.nan
 
     return df_with_qoq
 

@@ -11,15 +11,31 @@ import pandas as pd  # noqa: E402
 import streamlit as st  # noqa: E402
 
 from core.classifications import get_stock_classification  # noqa: E402
+from core.data_processing import report_range  # noqa: E402
 from core.enums import (  # noqa: E402
     Confidence,
     DefaultTickers,
+    DerivedMetric,
     FilePaths,
     Metric,
     RollingWindow,
 )
 
-CLASSIFICATIONS_AVAILABLE = True
+# Display labels for the metrics that actually get a _QoQ series. Keyed off
+# DerivedMetric.qoq_metrics() so the rolling-average tables cannot drift back
+# out of sync with what the pipeline computes.
+QOQ_METRIC_LABELS = {
+    "EPS": "EPS",
+    "Revenue": "Revenue",
+    "Price": "Price",
+    "EPS_TTM": "EPS TTM",
+    "Revenue_TTM": "Revenue TTM",
+    "Multiple": "P/E Multiple",
+    "DivAmt": "Div Amount",
+    "DivYield": "Div Yield Q",
+    "DivYieldAnnual": "Div Yield Annual",
+    "PayoutRatio": "Payout Ratio",
+}
 
 from dashboard.charts import (  # noqa: E402
     create_combined_peg_pegy_chart,
@@ -109,14 +125,11 @@ def main():
     st.sidebar.header("📊 Data Overview")
     st.sidebar.write(f"**Total Records:** {len(df):,}")
     st.sidebar.write(f"**Unique Tickers:** {df['Ticker'].nunique()}")
-    st.sidebar.write(f"**Date Range:** {df['Report'].min()} to {df['Report'].max()}")
+    earliest_report, latest_report = report_range(df["Report"])
+    st.sidebar.write(f"**Date Range:** {earliest_report} to {latest_report}")
 
     # Show classification status
-    if CLASSIFICATIONS_AVAILABLE:
-        st.sidebar.success("✅ Stock classifications loaded")
-    else:
-        st.sidebar.warning("⚠️ Stock classifications not available")
-
+    st.sidebar.success("✅ Stock classifications loaded")
     # Sidebar - Ticker Selection
     st.sidebar.header("🎯 Select Ticker")
     available_tickers = sorted(df["Ticker"].unique())
@@ -387,22 +400,7 @@ def main():
         ticker_data = df[df["Ticker"] == selected_ticker]
 
         qoq_metrics = []
-        for metric in [
-            "EPS",
-            "EPS_TTM",
-            "Revenue",
-            "Revenue_TTM",
-            "Price",
-            "Multiple",
-            "DivAmt",
-            "DivYield",
-            "DivYieldAnnual",
-            "PayoutRatio",
-            "PEGRatio",
-            "EPSMomentum",
-            "PriceVolatility",
-            "RevenueConsistency",
-        ]:
+        for metric in DerivedMetric.qoq_metrics():
             qoq_col = f"{metric}_QoQ"
             if qoq_col in ticker_data.columns:
                 qoq_data = ticker_data[qoq_col].dropna()
@@ -504,7 +502,9 @@ def main():
                 )
 
             # Enhanced EPS chart with all scenarios
-            eps_pred_chart = create_eps_prediction_chart(df, selected_ticker)
+            eps_pred_chart = create_eps_prediction_chart(
+                df, selected_ticker, prediction=prediction
+            )
             if eps_pred_chart:
                 st.plotly_chart(eps_pred_chart, width="stretch")
 
@@ -624,7 +624,9 @@ def main():
                 )
 
             # Enhanced EPS TTM chart with all scenarios
-            eps_ttm_pred_chart = create_eps_ttm_prediction_chart(df, selected_ticker)
+            eps_ttm_pred_chart = create_eps_ttm_prediction_chart(
+                df, selected_ticker, prediction=prediction
+            )
             if eps_ttm_pred_chart:
                 st.plotly_chart(eps_ttm_pred_chart, width="stretch")
 
@@ -740,7 +742,9 @@ def main():
                 )
 
             # Enhanced Price chart with all scenarios
-            price_pred_chart = create_price_prediction_chart(df, selected_ticker)
+            price_pred_chart = create_price_prediction_chart(
+                df, selected_ticker, prediction=prediction
+            )
             if price_pred_chart:
                 st.plotly_chart(price_pred_chart, width="stretch")
 
@@ -926,39 +930,19 @@ def main():
             ticker_summary = {"Ticker": ticker}
 
             # Add stock classification data if available
-            if CLASSIFICATIONS_AVAILABLE:
-                classification = get_stock_classification(ticker)
-                if classification:
-                    ticker_summary["Sector"] = classification.sector.value
-                    ticker_summary["Industry"] = classification.industry.value
-                    ticker_summary["Sub_Industry"] = classification.sub_industry.value
-                else:
-                    # Track missing classifications for optional display
-                    missing_classifications.append(ticker)
-                    ticker_summary["Sector"] = "Unclassified"
-                    ticker_summary["Industry"] = "Unclassified"
-                    ticker_summary["Sub_Industry"] = "Unclassified"
+            classification = get_stock_classification(ticker)
+            if classification:
+                ticker_summary["Sector"] = classification.sector.value
+                ticker_summary["Industry"] = classification.industry.value
+                ticker_summary["Sub_Industry"] = classification.sub_industry.value
             else:
-                ticker_summary["Sector"] = "N/A"
-                ticker_summary["Industry"] = "N/A"
-                ticker_summary["Sub_Industry"] = "N/A"
-
+                # Track missing classifications for optional display
+                missing_classifications.append(ticker)
+                ticker_summary["Sector"] = "Unclassified"
+                ticker_summary["Industry"] = "Unclassified"
+                ticker_summary["Sub_Industry"] = "Unclassified"
             # For each metric, calculate the latest rolling averages
-            for metric in [
-                "EPS",
-                "Revenue",
-                "EPS_TTM",
-                "Revenue_TTM",
-                "Price",
-                "DivAmt",
-                "DivYield",
-                "DivYieldAnnual",
-                "PayoutRatio",
-                "PEGRatio",
-                "EPSMomentum",
-                "PriceVolatility",
-                "RevenueConsistency",
-            ]:
+            for metric in DerivedMetric.qoq_metrics():
                 qoq_col = f"{metric}_QoQ"
                 if qoq_col in ticker_data.columns:
                     qoq_values = ticker_data[qoq_col].dropna()
@@ -1020,7 +1004,7 @@ def main():
             rolling_df = pd.DataFrame(rolling_summary_data)
 
             # Create sector-based filtering options
-            if CLASSIFICATIONS_AVAILABLE and "Sector" in rolling_df.columns:
+            if "Sector" in rolling_df.columns:
                 st.subheader("🎯 Filter by Sector")
                 sectors = sorted(rolling_df["Sector"].unique())
 
@@ -1055,22 +1039,10 @@ def main():
             display_cols = ["Ticker"]
 
             # Add classification columns if available
-            if CLASSIFICATIONS_AVAILABLE:
-                display_cols.extend(["Sector", "Industry", "Sub_Industry"])
+            display_cols.extend(["Sector", "Industry", "Sub_Industry"])
 
             # Add columns for each metric with descriptive names
-            for metric in [
-                "EPS",
-                "Revenue",
-                "EPS_TTM",
-                "Revenue_TTM",
-                "Price",
-                "DivAmt",
-                "DivYield",
-                "DivYieldAnnual",
-                "PayoutRatio",
-                "PEGRatio",
-            ]:
+            for metric in DerivedMetric.qoq_metrics():
                 for period in ["4Q", "8Q", "12Q"]:
                     col_name = f"{metric}_{period}_Avg"
                     if col_name in filtered_rolling_df.columns:
@@ -1085,39 +1057,13 @@ def main():
             # Rename columns for better readability
             column_mapping = {
                 "Sub_Industry": "Sub-Industry",
-                "EPS_4Q_Avg": "EPS 4Q Avg",
-                "EPS_8Q_Avg": "EPS 8Q Avg",
-                "EPS_12Q_Avg": "EPS 12Q Avg",
-                "Revenue_4Q_Avg": "Revenue 4Q Avg",
-                "Revenue_8Q_Avg": "Revenue 8Q Avg",
-                "Revenue_12Q_Avg": "Revenue 12Q Avg",
-                "EPS_TTM_4Q_Avg": "EPS TTM 4Q Avg",
-                "EPS_TTM_8Q_Avg": "EPS TTM 8Q Avg",
-                "EPS_TTM_12Q_Avg": "EPS TTM 12Q Avg",
-                "Revenue_TTM_4Q_Avg": "Revenue TTM 4Q Avg",
-                "Revenue_TTM_8Q_Avg": "Revenue TTM 8Q Avg",
-                "Revenue_TTM_12Q_Avg": "Revenue TTM 12Q Avg",
-                "Price_4Q_Avg": "Price 4Q Avg",
-                "Price_8Q_Avg": "Price 8Q Avg",
-                "Price_12Q_Avg": "Price 12Q Avg",
-                "DivAmt_4Q_Avg": "Div Amount 4Q Avg",
-                "DivAmt_8Q_Avg": "Div Amount 8Q Avg",
-                "DivAmt_12Q_Avg": "Div Amount 12Q Avg",
-                "DivYield_4Q_Avg": "Div Yield Q 4Q Avg",
-                "DivYield_8Q_Avg": "Div Yield Q 8Q Avg",
-                "DivYield_12Q_Avg": "Div Yield Q 12Q Avg",
-                "DivYieldAnnual_4Q_Avg": "Div Yield Annual 4Q Avg",
-                "DivYieldAnnual_8Q_Avg": "Div Yield Annual 8Q Avg",
-                "DivYieldAnnual_12Q_Avg": "Div Yield Annual 12Q Avg",
-                "PayoutRatio_4Q_Avg": "Payout Ratio 4Q Avg",
-                "PayoutRatio_8Q_Avg": "Payout Ratio 8Q Avg",
-                "PayoutRatio_12Q_Avg": "Payout Ratio 12Q Avg",
-                "PEGRatio_4Q_Avg": "PEG Ratio 4Q Avg",
-                "PEGRatio_8Q_Avg": "PEG Ratio 8Q Avg",
-                "PEGRatio_12Q_Avg": "PEG Ratio 12Q Avg",
                 "Latest_Multiple": "Latest P/E Multiple",
                 "Latest_Revenue_TTM": "Latest Revenue TTM ($M)",
             }
+            for metric in DerivedMetric.qoq_metrics():
+                label = QOQ_METRIC_LABELS.get(metric, metric)
+                for period in ["4Q", "8Q", "12Q"]:
+                    column_mapping[f"{metric}_{period}_Avg"] = f"{label} {period} Avg"
 
             comprehensive_df = comprehensive_df.rename(columns=column_mapping)
 
@@ -1154,7 +1100,7 @@ def main():
             )
 
             # Show information about missing classifications if any
-            if CLASSIFICATIONS_AVAILABLE and missing_classifications:
+            if missing_classifications:
                 with st.expander(
                     f"ℹ️ Data Quality Info - {len(missing_classifications)} "
                     "ticker(s) missing classifications"
@@ -1167,7 +1113,7 @@ def main():
                     st.write(", ".join(sorted(missing_classifications)))
 
             # Add sector analysis if classifications are available
-            if CLASSIFICATIONS_AVAILABLE and "Sector" in filtered_rolling_df.columns:
+            if "Sector" in filtered_rolling_df.columns:
                 st.markdown("---")
                 st.subheader("📈 Sector Analysis")
 
@@ -1247,10 +1193,9 @@ def main():
                 # EPS QoQ Rolling Averages Table
                 st.subheader("📈 EPS QoQ Rolling Averages (%)")
                 eps_cols = ["Ticker"]
-                if CLASSIFICATIONS_AVAILABLE:
-                    eps_cols.extend(
-                        ["Sector", "Industry", "Sub_Industry"]
-                    )  # Use original column name
+                eps_cols.extend(
+                    ["Sector", "Industry", "Sub_Industry"]
+                )  # Use original column name
                 eps_cols.extend(["EPS_4Q_Avg", "EPS_8Q_Avg", "EPS_12Q_Avg"])
 
                 eps_rolling_df = filtered_rolling_df[eps_cols].copy()
@@ -1284,10 +1229,9 @@ def main():
                 # Revenue QoQ Rolling Averages Table
                 st.subheader("💰 Revenue QoQ Rolling Averages (%)")
                 revenue_cols = ["Ticker"]
-                if CLASSIFICATIONS_AVAILABLE:
-                    revenue_cols.extend(
-                        ["Sector", "Industry", "Sub_Industry"]
-                    )  # Use original column name
+                revenue_cols.extend(
+                    ["Sector", "Industry", "Sub_Industry"]
+                )  # Use original column name
                 revenue_cols.extend(
                     ["Revenue_4Q_Avg", "Revenue_8Q_Avg", "Revenue_12Q_Avg"]
                 )
@@ -1310,10 +1254,9 @@ def main():
                 # EPS TTM QoQ Rolling Averages Table
                 st.subheader("📊 EPS TTM QoQ Rolling Averages (%)")
                 eps_ttm_cols = ["Ticker"]
-                if CLASSIFICATIONS_AVAILABLE:
-                    eps_ttm_cols.extend(
-                        ["Sector", "Industry", "Sub_Industry"]
-                    )  # Use original column name
+                eps_ttm_cols.extend(
+                    ["Sector", "Industry", "Sub_Industry"]
+                )  # Use original column name
                 eps_ttm_cols.extend(
                     ["EPS_TTM_4Q_Avg", "EPS_TTM_8Q_Avg", "EPS_TTM_12Q_Avg"]
                 )
@@ -1335,10 +1278,9 @@ def main():
                 # Revenue TTM QoQ Rolling Averages Table
                 st.subheader("💼 Revenue TTM QoQ Rolling Averages (%)")
                 revenue_ttm_cols = ["Ticker"]
-                if CLASSIFICATIONS_AVAILABLE:
-                    revenue_ttm_cols.extend(
-                        ["Sector", "Industry", "Sub_Industry"]
-                    )  # Use original column name
+                revenue_ttm_cols.extend(
+                    ["Sector", "Industry", "Sub_Industry"]
+                )  # Use original column name
                 revenue_ttm_cols.extend(
                     ["Revenue_TTM_4Q_Avg", "Revenue_TTM_8Q_Avg", "Revenue_TTM_12Q_Avg"]
                 )
@@ -1362,10 +1304,9 @@ def main():
                 # Price QoQ Rolling Averages Table
                 st.subheader("💹 Price QoQ Rolling Averages (%)")
                 price_cols = ["Ticker"]
-                if CLASSIFICATIONS_AVAILABLE:
-                    price_cols.extend(
-                        ["Sector", "Industry", "Sub_Industry"]
-                    )  # Use original column name
+                price_cols.extend(
+                    ["Sector", "Industry", "Sub_Industry"]
+                )  # Use original column name
                 price_cols.extend(["Price_4Q_Avg", "Price_8Q_Avg", "Price_12Q_Avg"])
                 price_rolling_df = filtered_rolling_df[price_cols].copy()
                 price_rename = {

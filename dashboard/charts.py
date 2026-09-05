@@ -486,13 +486,16 @@ def create_comparison_chart(df, tickers, metric, yaxis_range=None):
     return fig
 
 
-def create_eps_prediction_chart(df, ticker):
+def create_eps_prediction_chart(df, ticker, prediction=None):
     """
     Create EPS chart with prediction point for next quarter.
 
     Args:
         df (pandas.DataFrame): Stock data with QoQ calculations
         ticker (str): Stock ticker symbol
+        prediction (dict, optional): Pre-computed predict_next_eps result.
+            Computed here when not supplied, so callers rendering several
+            prediction charts for one ticker can compute it once.
 
     Returns:
         plotly.graph_objects.Figure or None: Chart with prediction
@@ -504,7 +507,9 @@ def create_eps_prediction_chart(df, ticker):
         return None
 
     # Get prediction data
-    prediction = predict_next_eps(df, ticker)
+    if prediction is None:
+        prediction = predict_next_eps(df, ticker)
+
     if prediction is None:
         # Return regular chart if no prediction possible
         return fig
@@ -698,13 +703,16 @@ def create_eps_prediction_chart(df, ticker):
     return fig
 
 
-def create_eps_ttm_prediction_chart(df, ticker):
+def create_eps_ttm_prediction_chart(df, ticker, prediction=None):
     """
     Create EPS TTM chart with prediction scenarios for next quarter impact.
 
     Args:
         df (pandas.DataFrame): Stock data with QoQ calculations
         ticker (str): Stock ticker symbol
+        prediction (dict, optional): Pre-computed predict_next_eps result.
+            Computed here when not supplied, so callers rendering several
+            prediction charts for one ticker can compute it once.
 
     Returns:
         plotly.graph_objects.Figure or None: Chart with TTM predictions
@@ -716,7 +724,9 @@ def create_eps_ttm_prediction_chart(df, ticker):
         return None
 
     # Get prediction data
-    prediction = predict_next_eps(df, ticker)
+    if prediction is None:
+        prediction = predict_next_eps(df, ticker)
+
     if prediction is None or prediction["predicted_eps_ttm"] is None:
         # Return regular chart if no TTM prediction possible
         return fig
@@ -910,7 +920,7 @@ def create_eps_ttm_prediction_chart(df, ticker):
     return fig
 
 
-def create_price_prediction_chart(df, ticker):
+def create_price_prediction_chart(df, ticker, prediction=None):
     """
     Create Price chart with prediction scenarios based on EPS_TTM predictions and
     current Multiple.
@@ -918,6 +928,9 @@ def create_price_prediction_chart(df, ticker):
     Args:
         df (pandas.DataFrame): Stock data with QoQ calculations
         ticker (str): Stock ticker symbol
+        prediction (dict, optional): Pre-computed predict_next_eps result.
+            Computed here when not supplied, so callers rendering several
+            prediction charts for one ticker can compute it once.
 
     Returns:
         plotly.graph_objects.Figure or None: Chart with price predictions
@@ -929,7 +942,9 @@ def create_price_prediction_chart(df, ticker):
         return None
 
     # Get prediction data
-    prediction = predict_next_eps(df, ticker)
+    if prediction is None:
+        prediction = predict_next_eps(df, ticker)
+
     if prediction is None or prediction["predicted_price"] is None:
         # Return regular chart if no price prediction possible
         return fig

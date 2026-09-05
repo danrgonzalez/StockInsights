@@ -54,6 +54,7 @@ from core.data_processing import (  # noqa: E402
     calculate_qoq_changes,
     calculate_sector_rankings,
     load_stock_data,
+    report_range,
 )
 from core.enums import (  # noqa: E402
     Column,
@@ -868,19 +869,6 @@ def build_meta(
         "history_embedded": include_history,
         "currency": "USD; Revenue in millions; ratios and *_QoQ in percent",
     }
-
-
-def report_range(reports: pd.Series) -> list:
-    """Earliest and latest fiscal quarter, ordered by year then quarter.
-
-    Report labels look like Q3'25, so sorting them as strings orders by quarter
-    before year and puts Q1'26 ahead of Q4'10.
-    """
-    labels = sorted(
-        {str(label) for label in reports.dropna()},
-        key=lambda label: (label[3:], label[1]),
-    )
-    return [labels[0], labels[-1]] if labels else [None, None]
 
 
 def build_history(panel: pd.DataFrame) -> dict[str, list[dict]]:

@@ -15,6 +15,7 @@ Usage:
 """
 
 from enum import Enum
+from pathlib import Path
 
 
 class Strategy(str, Enum):
@@ -116,7 +117,6 @@ class DerivedMetric(str, Enum):
     REVENUE_TTM_QOQ = "Revenue_TTM_QoQ"
     DIVIDEND_QOQ = "DivAmt_QoQ"
     DIVIDEND_YIELD_QOQ = "DivYield_QoQ"
-    DIVIDEND_YIELD_ANNUAL_QOQ = "DivYieldAnnual_QoQ"
     PAYOUT_RATIO_QOQ = "PayoutRatio_QoQ"
     MULTIPLE_QOQ = "Multiple_QoQ"
 
@@ -156,7 +156,9 @@ class DerivedMetric(str, Enum):
             cls.MULTIPLE.value,
             Metric.DIVIDEND_AMOUNT.value,
             cls.DIVIDEND_YIELD.value,
-            cls.DIVIDEND_YIELD_ANNUAL.value,
+            # DivYieldAnnual is DivYield * 4, so its QoQ percent change is
+            # identical to DivYield_QoQ (verified equal on all 4,813 rows where
+            # both existed). Only the level metric is kept.
             cls.PAYOUT_RATIO.value,
         ]
 
@@ -374,17 +376,29 @@ class ChartDefaults:
     Y_AXIS_PADDING = 0.1  # 10% padding on y-axis
 
 
+# Repo root, resolved from this file rather than the working directory. Callers
+# import core/ from notebooks and services where the CWD is not the repo root;
+# relative paths there silently resolved to nothing, and the strategy mapping in
+# particular failed to load and fell back to a different prediction strategy.
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
 class FilePaths:
-    """Standard file paths used throughout the application."""
+    """Standard file paths used throughout the application.
+
+    All paths are absolute, resolved against the repo root, so they behave
+    identically regardless of the working directory. They are ``str`` rather
+    than ``Path`` so existing callers that treat them as strings keep working.
+    """
 
     # Data files
-    DATA_DIR = "data"
-    DATA_FILE = "data/StockData_Indexed.xlsx"
-    RAW_DATA_FILE = "data/StockData.xlsx"
+    DATA_DIR = str(REPO_ROOT / "data")
+    DATA_FILE = str(REPO_ROOT / "data" / "StockData_Indexed.xlsx")
+    RAW_DATA_FILE = str(REPO_ROOT / "data" / "StockData.xlsx")
 
     # Config files
-    CONFIG_DIR = "config"
-    STRATEGY_MAPPING_FILE = "config/ticker_strategy_mapping.json"
+    CONFIG_DIR = str(REPO_ROOT / "config")
+    STRATEGY_MAPPING_FILE = str(REPO_ROOT / "config" / "ticker_strategy_mapping.json")
 
     # Export format
     EXPORT_DATETIME_FORMAT = "%Y%m%d_%H%M%S"

@@ -10,25 +10,6 @@ bug with visible impact · P3 quality/maintainability · P4 data sourcing.
 
 ## P1 — Silently wrong results
 
-### 1. `predict_next_eps` returns different numbers depending on working directory
-`FilePaths.STRATEGY_MAPPING_FILE` is the relative path `config/ticker_strategy_mapping.json`.
-`load_ticker_strategy_mapping` swallows `FileNotFoundError` and returns `None`
-(`core/backtesting.py:512`), so `get_ticker_strategy` falls back to `weighted_growth`
-while `core/predictions.py:180` still stamps the result "backtested optimal".
-
-```
-from repo root:  $2.58  "Ticker-specific Seasonal (backtested optimal)"
-from /tmp:       $2.19  "Ticker-specific Weighted Growth (backtested optimal)"
-```
-
-An 18% different AAPL forecast under an identical label. Matters because the readme
-advertises `core/` for notebooks and services, where CWD is not the repo root.
-
-- [ ] Resolve `FilePaths` entries against `Path(__file__).parents[1]`, as
-      `core/exclusions.py` already does.
-- [ ] Make the fallback visible in the methodology string instead of claiming
-      "backtested optimal".
-
 ### 2. Negative earnings invert the sector rankings
 318 rows have `EPS_TTM < 0`, making `Multiple` negative (min **-33,282**).
 `DerivedMetric.negative_ranking_metrics()` ranks Multiple/PEG/PEGY *ascending*
@@ -133,59 +114,12 @@ load-time fix must currently land in both — the exclusion filter and the
 
 - [ ] Make it delegate to `core.load_stock_data` and keep only caching + `st` messaging.
 
-### 11. `CLASSIFICATIONS_AVAILABLE` is hardcoded `True`
-`dashboard/app.py:22`, beside an unguarded import — roughly 7 `else:` branches are unreachable.
-
-- [ ] Remove the flag and the dead branches.
-
-### 12. `predict_next_eps` runs 4x per ticker render
-Once in `app.py`, once in each of three prediction charts, each re-reading the JSON
-mapping. Measured cost is negligible; the duplication is the problem.
-
-- [ ] Compute once in `app.py` and pass into the chart functions.
-
 ### 15. Repo hygiene
 - [ ] `.claude/settings.local.json` is tracked but is a local file.
 - [ ] `data/` is entirely untracked (`.gitignore` excludes `*.xlsx`/`*.csv`), so the
       repo cannot run from a fresh clone **and the spreadsheet fixes made on
       2026-09-02 are not under version control**. Decide on a data strategy.
 - [ ] `setup_env.sh` hardcodes `/Users/dgonzalez/miniconda3`.
-
-### 30. The Rolling Averages tab lists four metrics that can never have values
-`dashboard/app.py:947` asks for rolling averages of `PEGRatio`, `EPSMomentum`,
-`PriceVolatility` and `RevenueConsistency`, but `DerivedMetric.qoq_metrics()`
-(`core/enums.py`) never computes a `_QoQ` series for any of them. All four fall
-through to the `np.nan` branch, so the table carries **12 permanently blank columns**
-(4 metrics x 4Q/8Q/12Q). The same four appear in the tab-1 QoQ summary at
-`dashboard/app.py:390`, where they are silently skipped instead.
-
-`Multiple` has the opposite problem: `Multiple_QoQ` is computed and charted, but the
-metric is absent from the tab-3 list.
-
-- [ ] Drop the four metrics from both lists, or add them to `qoq_metrics()` if a QoQ
-      of a ratio is actually wanted. Add `Multiple` to the tab-3 list.
-
-### 31. Small data-model defects
-Each is minor on its own; all three mislead a reader who trusts the column name.
-
-- **Sidebar date range sorts labels as strings.** `dashboard/app.py:112` uses
-  `df['Report'].min()/.max()` on labels shaped `Q3'25`, which orders by quarter before
-  year — `Q1'26` sorts below `Q4'10`. It currently displays **"Q1'10 to Q4'26"** when
-  the data actually reaches **Q2'27** (fiscal-year-ahead tickers: NVDA, CRM, WMT,
-  ADSK, TJX, WDAY).
-- **`DivYieldAnnual_QoQ` duplicates `DivYield_QoQ`.** Annual yield is quarterly x 4, so
-  the percent change is identical — verified equal on all 4,813 rows where both exist.
-  One of the two columns is noise.
-- **`DivGrowthRate` returns `0.0` to mean "unknown".** `core/data_processing.py:334`
-  sets 0.0 when a ticker has fewer than two detected dividend changes, which is
-  indistinguishable from a real zero-growth dividend. Three tickers are affected, one
-  of which (`EA`) is a current payer reported as having 0% dividend growth.
-
-- [ ] Sort `Report` by `(year, quarter)` for the sidebar range.
-- [ ] Drop one of the duplicate dividend-yield QoQ columns.
-- [ ] Return `NaN`, not `0.0`, when dividend growth cannot be measured.
-
----
 
 ## P4 — Data sourcing
 
@@ -323,6 +257,36 @@ of the above.
 ---
 
 ## Done — 2026-09-05
+
+- [x] **Item 1** — `FilePaths` entries are now absolute, resolved from
+      `core/enums.py` via `REPO_ROOT`, so `core/` behaves identically from a notebook
+      or a service. AAPL predicts $2.92 from both the repo root and `/tmp`; it used to
+      differ by 18%. Added `get_ticker_strategy_with_source`, so the methodology string
+      only claims "backtested optimal" when the strategy really came from the mapping —
+      the two fallbacks now read "(default; backtested strategy mapping unavailable)"
+      and "(default; no backtested strategy for X)".
+- [x] **Item 11** — removed `CLASSIFICATIONS_AVAILABLE` and its 11 guard sites
+      (8 unwrapped, 2 dead `else:` branches deleted, 3 `and` guards simplified);
+      app.py is 18 lines shorter.
+- [x] **Item 12** — the three prediction charts take an optional pre-computed
+      `prediction`; `app.py` computes it once. 4 calls per ticker render -> 1, with the
+      three chart figures verified byte-identical. Calling a chart standalone still
+      computes its own.
+- [x] **Item 30** — the four metrics with no `_QoQ` series (`PEGRatio`, `EPSMomentum`,
+      `PriceVolatility`, `RevenueConsistency`) are gone from the rolling-average and
+      tab-1 lists, and `Multiple` was added. Verified: 12 permanently blank columns ->
+      0, the 27 columns that carried data are unchanged. All four hand-maintained
+      metric lists (and the rename map) now derive from `DerivedMetric.qoq_metrics()`,
+      which is why they had drifted apart in the first place.
+- [x] **Item 31** — all three:
+      `report_sort_key`/`report_range` added to `core/data_processing.py` and used by
+      the sidebar, which now reads **Q1'10 to Q2'27** instead of Q1'10 to Q4'26 (the
+      exporter's private copy of that helper was deleted in favour of the shared one);
+      `DivYieldAnnual` dropped from `qoq_metrics()` since its QoQ was identical to
+      `DivYield_QoQ` on all 4,813 rows; `DivGrowthRate` returns `NaN` rather than `0.0`
+      when growth cannot be measured, which corrects exactly the three tickers the
+      backlog named — `AAL`, `EA`, `PVH` — the other 35 unmeasurable tickers were
+      already absent from the export.
 
 - [x] **Item 5** — backtest ranking printed the pre-sort DataFrame index as the rank
       (`rank = idx + 1`). Now `enumerate` over the sorted frame. AAPL reproduced the

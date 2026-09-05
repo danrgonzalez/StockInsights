@@ -428,6 +428,36 @@ pip install -r requirements-dev.txt
 pre-commit install
 ```
 
+## Getting the Data
+
+**The data files are deliberately not in this repository.** `.gitignore` excludes
+`*.xlsx` and `*.csv`, so a fresh clone has no `data/` directory and nothing will
+run until you supply one. This keeps the repo small and avoids committing a
+binary that changes every quarter.
+
+You need to create `data/` and place the raw workbook in it:
+
+```
+data/
+├── StockData.xlsx          # you supply this — the raw quarterly panel
+├── StockData_Indexed.xlsx  # generated: python scripts/indexer.py
+└── exports/                # generated: python scripts/export_dashboard_data.py
+```
+
+`StockData.xlsx` is maintained by hand from quarterly filings, one row per
+ticker per fiscal quarter, in the format below. Once it is in place:
+
+```bash
+python scripts/indexer.py          # builds StockData_Indexed.xlsx
+streamlit run dashboard/app.py     # reads the indexed workbook
+```
+
+Everything under `data/` is either hand-maintained or regenerable from
+`StockData.xlsx`, so nothing there needs backing up beyond that one file —
+**but it is not version-controlled either, so keep your own copy.** Corrections
+made to the workbook (label fixes, backfilled earnings dates) live only in your
+copy; see `TODO.md` for the running record of what has been changed and why.
+
 ## Input Data Format
 
 Your `StockData.xlsx` file should contain the following columns:
@@ -601,6 +631,9 @@ Solution: `source setup_env.sh` first; if still missing, `pip install -r require
 1. Update `data/StockData.xlsx` with new records
 2. Re-run the indexer: `python scripts/indexer.py`
 3. Refresh the dashboard (or restart it)
+
+Because `data/` is untracked (see [Getting the Data](#getting-the-data)), step 1
+is not recoverable from git. Keep a backup of `StockData.xlsx` before editing it.
 
 ## Development
 

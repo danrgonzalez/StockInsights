@@ -8,25 +8,6 @@ bug with visible impact · P3 quality/maintainability · P4 data sourcing.
 
 ---
 
-## P3 — Quality and maintainability
-
-### 15. Repo hygiene — data strategy still open
-- [x] `.claude/settings.local.json` untracked and gitignored (2026-09-05). It is
-      still in git history, which is public; rewriting history is the only way to
-      remove it and is probably not worth it — it holds tool permissions, a home
-      path and an email address, nothing secret.
-- [x] `setup_env.sh` no longer hardcodes a conda path (2026-09-05). It uses
-      `conda info --base`, falls back to the usual install locations, and takes a
-      `CONDA_ROOT` override; it now fails with a useful message instead of silently
-      doing nothing.
-- [ ] `data/` is entirely untracked (`.gitignore` excludes `*.xlsx`/`*.csv`), so the
-      repo cannot run from a fresh clone **and the spreadsheet fixes made on
-      2026-09-02 are not under version control**. Decide on a data strategy.
-      **This is a decision, not a fix** — the workbook is ~400KB and changes every
-      quarter, and `data/exports/` adds ~7MB of regenerable output. Options: commit
-      the workbook and gitignore `exports/`; keep both out and document where to get
-      the data; or use Git LFS.
-
 ## P4 — Data sourcing
 
 ### 16. BRK/B is missing 10 real quarters
@@ -95,45 +76,6 @@ info message.
 Machine-level issues, not repo issues. They blocked the 2026-09-02 push to origin and
 will keep causing trouble until fixed.
 
-### 23. A 2015 git shadows the modern one on PATH  *(root cause of 24)*
-`/etc/paths` lists `/usr/local/bin` before `/usr/bin`, so:
-
-| Path | Version |
-|------|---------|
-| `/usr/local/bin/git` | **2.6.4 (2015)** — wins |
-| `/usr/bin/git` | 2.50.1 (Apple Git-155) |
-| `/usr/local/git/bin/git` | 2.6.4 — old standalone Git-for-Mac installer |
-| `~/opt/homebrew/bin/git` | 2.43.2 |
-
-2.6.4 also lacks `git remote get-url` and `git config --show-origin`, and Streamlit
-warns about it at startup ("requires Git 2.7.0 or later").
-
-- [ ] Reorder `/etc/paths` so `/usr/bin` precedes `/usr/local/bin`, or remove the
-      stale 2.6.4 installs (`/usr/local/bin/git`, `/usr/local/git/`).
-
-### 24. `credential.helper` appears broken but is not
-`~/.gitconfig` contains:
-
-```
-[credential]
-	helper = osxkeychain
-	helper =
-	helper = /usr/local/share/gcm-core/git-credential-manager-core
-```
-
-The empty middle value is the **correct, documented idiom** for resetting the helper
-list (git >= 2.9) so only gcm-core applies. Git 2.6.4 predates that behaviour and tries
-to execute a helper named `""`, producing:
-
-```
-git: 'credential-' is not a git command
-```
-
-So the config is right and the git is wrong. **Do not "fix" the config** — fixing
-item 23 makes this disappear. gcm-core itself works (v2.0.632).
-
-- [ ] No action beyond item 23. Re-verify once PATH is fixed.
-
 ### 25. SSH key is not registered with GitHub
 `~/.ssh/id_rsa.pub` exists (RSA 4096, `SHA256:7WdzGyVzN/jvq5PRPv92+NcpvVEijeTiW41e56hm5ss`)
 but `ssh -T git@github.com` returns `Permission denied (publickey)`. Auth currently
@@ -142,27 +84,36 @@ works only via `gh` over https.
 - [ ] Add the key at https://github.com/settings/keys, or drop the idea and stay on
       https via `gh`.
 
-### 26. `gh` is not registered as git's credential helper
-`gh` is authenticated (as `danrgonzalez`), but git cannot reach that token on its own —
-the 2026-09-02 push needed an explicit one-off override:
-
-```bash
-/usr/bin/git -c credential.helper= -c credential.helper='!gh auth git-credential' \
-    push origin main
-```
-
-- [ ] Run `gh auth setup-git` for a permanent fix (after item 23), so a plain
-      `git push` works.
-
-### 27. `gh` CLI is three years old
-Version 2.5.1 (2022-02-15). Its token had silently expired, which is what surfaced all
-of the above.
-
-- [ ] Upgrade (`brew upgrade gh`).
-
 ---
 
 ## Done — 2026-09-05
+
+- [x] **Item 15** — all three parts. `.claude/settings.local.json` untracked and
+      gitignored (still in public history; not worth a rewrite for tool permissions
+      and a home path). `setup_env.sh` resolves conda via `conda info --base` with
+      fallbacks and a `CONDA_ROOT` override instead of hardcoding one path. **Data
+      strategy decided: keep `data/` out of the repo** — readme gained a "Getting the
+      Data" section describing what `data/` must contain, which files are generated
+      and which one you must supply and back up yourself, plus a warning on the
+      Updating Data steps that they are not recoverable from git.
+- [x] **Item 23** — resolved without sudo. `/usr/local/bin` is group-writable by the
+      user, so the five 2015 Git-for-Mac symlinks (`git`, `git-cvsserver`,
+      `git-shell`, `git-upload-pack`, `gitk`) were renamed to `*.disabled-2015`
+      rather than editing `/etc/paths`. `git --version` is now **2.50.1 (Apple
+      Git-155)**, was 2.6.4. `/etc/paths.d/git` still adds `/usr/local/git/bin` but
+      it sorts after `/usr/bin`, so it no longer wins. Reversible: rename them back.
+- [x] **Item 24** — confirmed self-resolved by item 23, exactly as predicted. The
+      empty-helper reset idiom now reads cleanly, `git config --show-origin
+      --get-all` and `git remote get-url` both work, and no
+      `git: 'credential-' is not a git command` appears. **The config was right; the
+      git was wrong.** Nothing in `~/.gitconfig` was changed.
+- [x] **Item 26** — `gh auth setup-git` run. It added `github.com`- and
+      `gist.github.com`-scoped helpers and left the global chain untouched, so item
+      24's idiom is undisturbed. Verified with a plain `git push --dry-run origin
+      main`: it authenticates with no credential override.
+- [x] **Item 27** — `brew upgrade gh`: **2.5.1 (2022-02-15) -> 2.100.0
+      (2026-09-03)**. Existing token still valid, logged in as `danrgonzalez` with
+      `gist`, `read:org`, `repo`, `workflow` scopes.
 
 - [x] **Items 8 + 29** — the sector feature is live and its arithmetic is a peer
       comparison. `core.attach_classifications` joins Sector/Industry/Sub_Industry

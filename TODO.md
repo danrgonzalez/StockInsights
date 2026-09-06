@@ -35,10 +35,19 @@ the file is 84-112. Financials are sound, so BABA is **not** excluded.
 
 - [ ] Confirm whether `2026-03-19` should be ~`2026-02-19`.
 
-### 19. EA is being acquired
-The sheet carries a `Buyout` note at Q2'26. Data is current; it will stop reporting.
+### 19. EA is being acquired — trigger may now be met
+The sheet carries a `Buyout` note at Q2'26.
 
-- [ ] Exclude once it stops reporting.
+Checked 2026-09-06: the workbook's leading edge is **2026-09-03** and 126 of 137
+tickers reported within 60 days of it, so the file is current. **EA's last report is
+`Q4'26` on 2026-05-05, 121 days behind** — it has missed roughly one quarterly cycle
+(EA's fiscal Q1 normally reports in early August).
+
+Suggestive, not conclusive: `BK` is 140 days behind with no buyout, so the workbook
+has gaps for other reasons too.
+
+- [ ] Check whether EA filed a Q1'27 report in August 2026. If it did, add the row.
+      If it did not, set `"exclude": true` in `config/excluded_tickers.json`.
 
 ### 20. 8,268 of 8,653 earnings dates are estimates
 Generated 2026-09-02 at 91.3125 days/quarter with per-ticker, per-fiscal-quarter
@@ -47,8 +56,6 @@ within two weeks. Long-range extrapolation is structurally sound but unverifiabl
 
 - [ ] Treat as approximations, never as reportable facts. Re-run the fit (don't patch)
       whenever real dates are added.
-
----
 
 ---
 

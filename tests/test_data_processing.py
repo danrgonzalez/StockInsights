@@ -16,6 +16,7 @@ from core.backtesting import (
     STRATEGY_SOURCE_GLOBAL_DEFAULT,
     get_ticker_strategy_with_source,
 )
+from core.classifications import get_stock_classification, normalize_symbol
 from core.data_processing import (
     attach_classifications,
     calculate_outperformance_ratios,
@@ -608,3 +609,38 @@ class TestAcquisitionProfile:
         assert aligned.index.name == "QuartersToAnnouncement"
         assert "EA" in aligned.columns
         assert aligned.index.is_monotonic_increasing
+
+
+class TestRenamedSymbols:
+    """A ticker change is a relabelling, not a new company."""
+
+    def test_former_symbol_maps_to_the_current_one(self):
+        assert normalize_symbol("BK") == "BNY"
+
+    def test_mapping_is_case_insensitive(self):
+        assert normalize_symbol("bk") == "BNY"
+        assert normalize_symbol(" Bk ") == "BNY"
+
+    def test_current_symbol_is_unchanged(self):
+        assert normalize_symbol("BNY") == "BNY"
+
+    def test_unrelated_symbols_are_untouched(self):
+        assert normalize_symbol("AAPL") == "AAPL"
+        assert normalize_symbol("BRK/B") == "BRK.B"
+
+    def test_former_symbol_still_resolves_a_classification(self):
+        """Rows predating the rename must not become Unclassified."""
+        assert get_stock_classification("BK") is not None
+        assert get_stock_classification("BK") == get_stock_classification("BNY")
+
+    def test_renamed_company_keeps_one_identity_in_the_panel(self):
+        df = attach_classifications(
+            pd.concat(
+                [
+                    build_panel([1.0] * 4, ticker="BK"),
+                    build_panel([1.0] * 4, ticker="BNY"),
+                ],
+                ignore_index=True,
+            )
+        )
+        assert (df["Sector"] == "Financials").all()

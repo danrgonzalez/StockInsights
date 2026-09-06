@@ -169,10 +169,10 @@ class StockSymbol(str, Enum):
     BAC = "BAC"
     BIDU = "BIDU"
     BIIB = "BIIB"
-    BK = "BK"
     BKNG = "BKNG"
     BLK = "BLK"
     BMY = "BMY"
+    BNY = "BNY"  # was BK; NYSE ticker changed 2026-05-21
     BRK_B = "BRK.B"
     BSX = "BSX"
     C = "C"
@@ -378,7 +378,7 @@ STOCK_CLASSIFICATIONS = {
         industry=Industry.BIOTECHNOLOGY,
         sub_industry=SubIndustry.BIOTECHNOLOGY,
     ),
-    StockSymbol.BK: StockClassification(
+    StockSymbol.BNY: StockClassification(
         sector=Sector.FINANCIALS,
         industry=Industry.CAPITAL_MARKETS,
         sub_industry=SubIndustry.ASSET_MANAGEMENT_CUSTODY_BANKS,
@@ -1092,21 +1092,36 @@ def get_stocks_by_sub_industry(sub_industry: SubIndustry) -> List[StockSymbol]:
     ]
 
 
+# Symbols a company used to trade under, mapped to its current one. A ticker
+# change is a relabelling, not a new company, so historical rows keep resolving
+# even if the source data has not been relabelled yet.
+RENAMED_SYMBOLS = {
+    "BK": "BNY",  # The Bank of New York Mellon, renamed on NYSE 2026-05-21
+}
+
+
 def normalize_symbol(symbol: str) -> str:
     """
     Normalize ticker symbols for mapping to handle various formats.
+
+    Also maps a company's former ticker onto its current one, so a rename does
+    not silently orphan the rows that predate it.
 
     Examples:
         BRK/B -> BRK.B
         BRK.B -> BRK.B
         BRK_B -> BRK.B
         brk/b -> BRK.B
+        BK    -> BNY
     """
     if not symbol or not isinstance(symbol, str):
         return symbol
 
     # Clean whitespace and convert to upper
     cleaned = symbol.strip().upper()
+
+    if cleaned in RENAMED_SYMBOLS:
+        return RENAMED_SYMBOLS[cleaned]
 
     # Handle BRK special case - normalize all variants to BRK.B
     if cleaned.startswith("BRK") and len(cleaned) == 5:

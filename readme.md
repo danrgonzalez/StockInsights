@@ -369,7 +369,7 @@ and keeping them apart matters:
 | `EA` | acquired | yes | $55B take-private by PIF/Silver Lake/Affinity, 2026-08-04. |
 | `BRK/B` | active | yes | 10 quarters missing (Q2'17-Q3'19); TTM/QoQ and Index alignment are wrong. |
 | `BABA` | active | no | Watch: one suspect earnings date; financials sound. |
-| `BK` | active | no | Watch: missing its Q2'26 row. Also rebranded to BNY; ticker may have moved. |
+| `BNY` | active | no | Renamed from `BK` on 2026-05-21. Former symbols are aliased in `normalize_symbol`, so pre-rename rows still resolve. |
 | `HAIN` | active | no | Watch: sub-$1.00 Nasdaq bid-price warning, reverse split planned. |
 
 **Acquired tickers are excluded, not deleted.** A company frozen in 2019 has no

@@ -1,0 +1,98 @@
+{
+  "_comment": "Single source of truth for ticker lifecycle status and data-quality holds. 'status' is a fact about the company: active (still reporting) or acquired (bought out / taken private / merged away, so it will never report again). 'exclude_from_active' drops a ticker from the active analysis universe at load - true for every acquired ticker, because a company frozen in 2019 does not belong in a 2026 sector benchmark, and also true for tickers held back purely for data quality. Acquired rows are NOT deleted: load with include_excluded=True to study what a company looked like in the quarters before its acquisition. Acquisition dates are from company announcements and SEC filings; 'announced' is the anchor for pre-acquisition profiling because that is when the market learns.",
+  "_updated": "2026-09-06",
+  "tickers": {
+    "S": {
+      "status": "acquired",
+      "exclude_from_active": true,
+      "acquisition": {
+        "acquirer": "T-Mobile US",
+        "type": "merger",
+        "announced": "2018-04-29",
+        "completed": "2020-04-01",
+        "delisted": "2020-04-13",
+        "consideration": "0.10256 TMUS shares per S share (all-stock)",
+        "price_per_share": null,
+        "deal_value_usd_bn": null,
+        "source": "https://www.t-mobile.com/news/un-carrier/t-mobile-sprint-one-company"
+      },
+      "reason": "Sprint merged into T-Mobile. Last report 2019-10-25. All 35 earnings dates are low-confidence estimates.",
+      "resolution": "Retained as an acquisition profile; excluded from active analysis."
+    },
+    "JWN": {
+      "status": "acquired",
+      "exclude_from_active": true,
+      "acquisition": {
+        "acquirer": "Nordstrom family and El Puerto de Liverpool",
+        "type": "take_private",
+        "announced": "2024-12-23",
+        "completed": "2025-05-20",
+        "delisted": "2025-05-21",
+        "consideration": "$24.25 per share in cash",
+        "price_per_share": 24.25,
+        "deal_value_usd_bn": 6.25,
+        "source": "https://press.nordstrom.com/news-releases/news-release-details/nordstrom-announces-completion-acquisition-nordstrom-family-and"
+      },
+      "reason": "Taken private. Last report 2025-01-24. All 56 earnings dates are low-confidence estimates.",
+      "resolution": "Retained as an acquisition profile; excluded from active analysis."
+    },
+    "SKX": {
+      "status": "acquired",
+      "exclude_from_active": true,
+      "acquisition": {
+        "acquirer": "3G Capital",
+        "type": "take_private",
+        "announced": "2025-05-05",
+        "completed": "2025-09-12",
+        "delisted": "2025-09-12",
+        "consideration": "$63.00 per share in cash, or unlisted equity",
+        "price_per_share": 63.0,
+        "deal_value_usd_bn": 9.42,
+        "source": "https://about.skechers.com/press-release/3g-capital-completes-acquisition-of-skechers"
+      },
+      "reason": "Acquired by 3G Capital. Last report 2025-07-25. All 58 earnings dates are low-confidence estimates.",
+      "resolution": "Retained as an acquisition profile; excluded from active analysis."
+    },
+    "EA": {
+      "status": "acquired",
+      "exclude_from_active": true,
+      "acquisition": {
+        "acquirer": "Public Investment Fund, Silver Lake, Affinity Partners",
+        "type": "take_private",
+        "announced": "2025-09-29",
+        "completed": "2026-08-04",
+        "delisted": "2026-08-04",
+        "consideration": "$210.00 per share in cash",
+        "price_per_share": 210.0,
+        "deal_value_usd_bn": 55.0,
+        "source": "https://www.ea.com/news/ea-announces-completion-of-acquisition"
+      },
+      "reason": "Largest all-cash leveraged buyout on record. Last report Q4'26 on 2026-05-05; the buyout closed 2026-08-04, so no further reports will come.",
+      "resolution": "Retained as an acquisition profile; excluded from active analysis."
+    },
+    "BRK/B": {
+      "status": "active",
+      "exclude_from_active": true,
+      "reason": "10 quarters missing from the source data (Q2'17-Q3'19). Rows are treated as consecutive, so TTM and QoQ silently bridge a 2.5-year hole and Index alignment is off by 10 quarters vs every other ticker.",
+      "resolution": "Backfill the 10 missing quarters, then set exclude_from_active=false. Do NOT relabel the Report column to close the gap - the existing labels are correct."
+    },
+    "BABA": {
+      "status": "active",
+      "exclude_from_active": false,
+      "reason": "WATCH ONLY. One suspect earnings date: rows 783-784 are 55 days apart (2026-03-19 -> 2026-05-13) where every other spacing in the file is 84-112. Financial data (EPS/Revenue/Price) is sound, so analysis is unaffected.",
+      "resolution": "Confirm whether 2026-03-19 should be ~2026-02-19."
+    },
+    "BK": {
+      "status": "active",
+      "exclude_from_active": false,
+      "reason": "WATCH ONLY. Missing its Q2'26 row: BNY reported Q2'26 on 2026-07-15 (EPS $2.45, revenue $5.7B) but the workbook stops at Q1'26 on 2026-04-16. Not an acquisition - the 140-day gap is a data gap. The company also rebranded to BNY and the ticker may have moved from BK to BNY.",
+      "resolution": "Add the missing Q2'26 row and confirm the current ticker symbol."
+    },
+    "HAIN": {
+      "status": "active",
+      "exclude_from_active": false,
+      "reason": "WATCH ONLY. Not acquired - still trading on Nasdaq - but it fell out of compliance with the $1.00 minimum bid price rule and plans a reverse split. Its 115-day reporting gap is not an acquisition signal.",
+      "resolution": "Watch for a delisting or reverse split; re-check status if it stops reporting."
+    }
+  }
+}

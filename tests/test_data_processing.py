@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from core.acquisitions import aligned_metric, all_profiles, build_profile
 from core.backtesting import (
     STRATEGY_SOURCE_GLOBAL_DEFAULT,
     get_ticker_strategy_with_source,
@@ -22,11 +23,21 @@ from core.data_processing import (
     calculate_sector_rankings,
     latest_row_per_ticker,
     latest_with_age,
+    load_stock_data,
     report_range,
     report_sort_key,
 )
-from core.enums import RollingWindow, StrategyPolicy, Thresholds
+from core.enums import FilePaths, RollingWindow, StrategyPolicy, Thresholds
 from core.predictions import predict_next_eps
+from core.ticker_status import (
+    STATUS_ACQUIRED,
+    STATUS_ACTIVE,
+    attach_status,
+    get_acquired_tickers,
+    get_acquisition,
+    get_excluded_tickers,
+    get_ticker_status,
+)
 
 
 def build_panel(eps, revenue=None, price=None, div=None, ticker="TEST"):
@@ -488,3 +499,112 @@ class TestZeroCrossingEps:
 
         assert prediction is not None
         assert prediction["predicted_eps"] is not None
+
+
+class TestTickerStatus:
+    """Acquired companies are separated from the active universe, not deleted."""
+
+    def test_acquired_tickers_are_configured(self):
+        acquired = get_acquired_tickers()
+
+        assert {"S", "JWN", "SKX", "EA"} <= acquired
+
+    def test_every_acquired_ticker_is_held_out_of_active(self):
+        """A company frozen years ago must not sit in a current benchmark."""
+        assert get_acquired_tickers() <= get_excluded_tickers()
+
+    def test_status_defaults_to_active_for_unlisted_tickers(self):
+        assert get_ticker_status("AAPL") == STATUS_ACTIVE
+        assert get_ticker_status("ZZZZ") == STATUS_ACTIVE
+
+    def test_acquired_ticker_reports_its_status(self):
+        assert get_ticker_status("EA") == STATUS_ACQUIRED
+
+    def test_data_quality_holds_stay_active_companies(self):
+        """BRK/B is excluded for missing quarters, but it was not acquired."""
+        assert get_ticker_status("BRK.B") == STATUS_ACTIVE
+        assert "BRK.B" in get_excluded_tickers()
+
+    def test_acquisition_details_are_present(self):
+        details = get_acquisition("EA")
+
+        assert details is not None
+        assert details["completed"] == "2026-08-04"
+        assert details["announced"] == "2025-09-29"
+        assert details["price_per_share"] == 210.0
+
+    def test_active_ticker_has_no_acquisition_details(self):
+        assert get_acquisition("AAPL") is None
+
+    def test_attach_status_marks_rows(self):
+        df = pd.concat(
+            [
+                build_panel([1.0] * 4, ticker="EA"),
+                build_panel([1.0] * 4, ticker="AAPL"),
+            ],
+            ignore_index=True,
+        )
+        out = attach_status(df)
+
+        assert set(out.loc[out["Ticker"] == "EA", "Status"]) == {STATUS_ACQUIRED}
+        assert set(out.loc[out["Ticker"] == "AAPL", "Status"]) == {STATUS_ACTIVE}
+
+
+class TestAcquisitionProfile:
+    """Quarters line up on the announcement so deals can be compared."""
+
+    @staticmethod
+    def panel():
+        return calculate_qoq_changes(
+            load_stock_data(FilePaths.DATA_FILE, include_excluded=True)
+        )
+
+    def test_acquired_tickers_load_only_when_asked(self):
+        active = load_stock_data(FilePaths.DATA_FILE)
+        everything = load_stock_data(FilePaths.DATA_FILE, include_excluded=True)
+
+        assert "EA" not in set(active["Ticker"])
+        assert "EA" in set(everything["Ticker"])
+        assert len(everything) > len(active)
+
+    def test_quarter_zero_is_the_last_report_before_announcement(self):
+        profile = build_profile(self.panel(), "EA")
+
+        assert profile is not None
+        anchor = profile[profile["QuartersToAnnouncement"] == 0].iloc[0]
+        assert anchor["EarningsDate"] <= pd.Timestamp("2025-09-29")
+
+    def test_quarters_after_the_announcement_are_positive(self):
+        profile = build_profile(self.panel(), "EA")
+        pending = profile[profile["QuartersToAnnouncement"] > 0]
+
+        assert len(pending) > 0
+        assert (pending["EarningsDate"] > pd.Timestamp("2025-09-29")).all()
+
+    def test_offsets_are_consecutive(self):
+        profile = build_profile(self.panel(), "SKX")
+        offsets = profile["QuartersToAnnouncement"].tolist()
+
+        assert offsets == list(range(offsets[0], offsets[0] + len(offsets)))
+
+    def test_active_ticker_has_no_profile(self):
+        assert build_profile(self.panel(), "AAPL") is None
+
+    def test_all_profiles_covers_every_acquired_ticker(self):
+        profiles = all_profiles(self.panel())
+
+        assert set(profiles["ticker"]) == get_acquired_tickers()
+        assert profiles["announced"].is_monotonic_increasing
+
+    def test_all_stock_deal_has_no_price_comparison(self):
+        """Sprint was all-stock, so there is no per-share cash price."""
+        profiles = all_profiles(self.panel()).set_index("ticker")
+
+        assert pd.isna(profiles.loc["S", "deal_price_vs_last_report_pct"])
+
+    def test_aligned_metric_puts_tickers_in_columns(self):
+        aligned = aligned_metric(self.panel(), "Multiple")
+
+        assert aligned.index.name == "QuartersToAnnouncement"
+        assert "EA" in aligned.columns
+        assert aligned.index.is_monotonic_increasing

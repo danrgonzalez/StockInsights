@@ -66,6 +66,6 @@ def load_data(file_path):
         summary = ", ".join(
             f"{ticker} ({count})" for ticker, count in sorted(stats["excluded"].items())
         )
-        st.info(f"Excluded tickers (config/excluded_tickers.json): {summary}")
+        st.info(f"Excluded from the active universe (ticker_status.json): {summary}")
 
     return df

@@ -729,7 +729,8 @@ def build_data_dictionary() -> dict:
             "other tickers' latest reported quarters. Those are not all the same "
             "calendar quarter, so a ticker that reports late is compared on "
             "slightly older figures.",
-            "Tickers listed in config/excluded_tickers.json are dropped before "
+            "Tickers marked exclude_from_active in config/ticker_status.json are "
+            "dropped before "
             "any calculation.",
         ],
     }

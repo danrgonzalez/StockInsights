@@ -349,23 +349,79 @@ The pipeline's own `*_SectorRank` columns rank a row against every
 ticker-quarter row in the sector across all history; they are still exported in
 `quarterly_metrics.csv`, labelled as such in the data dictionary.
 
-## Excluded Tickers
+## Ticker Status: Active vs Acquired
 
-`config/excluded_tickers.json` is the single source of truth for tickers with known
-data problems. Entries with `"exclude": true` are filtered out at data load, so the
-dashboard, predictions and backtests all ignore the same set.
+`config/ticker_status.json` is the single source of truth for two separate ideas,
+and keeping them apart matters:
 
-| Ticker | Status | Reason |
-|--------|--------|--------|
-| `S` | excluded | Delisted (Sprint). Last report 2019-10-25. No real earnings dates. |
-| `JWN` | excluded | Taken private. 585 days stale. No real earnings dates. |
-| `SKX` | excluded | Acquired. 403 days stale. No real earnings dates. |
-| `BRK/B` | excluded | 10 quarters missing (Q2'17-Q3'19); TTM/QoQ and Index alignment are wrong. |
-| `BABA` | watch | One suspect earnings date; financials sound, so still included. |
-| `EA` | watch | "Buyout" note in the sheet; still reporting. |
+- **`status`** — a fact about the company. `active` means it still reports;
+  `acquired` means it was bought out, taken private or merged away and will never
+  report again.
+- **`exclude_from_active`** — whether to drop it from the *active analysis
+  universe* at load. True for every acquired ticker, and also for tickers held
+  back purely for data quality, which are still active companies.
 
-To bring a ticker back, set its `"exclude"` to `false` — no re-index needed, since
-`StockData_Indexed.xlsx` still contains all 141 tickers.
+| Ticker | Status | Held out | Why |
+|--------|--------|----------|-----|
+| `S` | acquired | yes | Merged into T-Mobile, completed 2020-04-01. |
+| `JWN` | acquired | yes | Taken private by the Nordstrom family + Liverpool, 2025-05-20. |
+| `SKX` | acquired | yes | Acquired by 3G Capital, 2025-09-12. |
+| `EA` | acquired | yes | $55B take-private by PIF/Silver Lake/Affinity, 2026-08-04. |
+| `BRK/B` | active | yes | 10 quarters missing (Q2'17-Q3'19); TTM/QoQ and Index alignment are wrong. |
+| `BABA` | active | no | Watch: one suspect earnings date; financials sound. |
+| `BK` | active | no | Watch: missing its Q2'26 row. Also rebranded to BNY; ticker may have moved. |
+| `HAIN` | active | no | Watch: sub-$1.00 Nasdaq bid-price warning, reverse split planned. |
+
+**Acquired tickers are excluded, not deleted.** A company frozen in 2019 has no
+business sitting in a 2026 sector benchmark, but its final quarters are exactly
+what you want when studying what a business looks like before it gets bought.
+
+```python
+from core import load_stock_data
+from core.enums import FilePaths
+
+active = load_stock_data(FilePaths.DATA_FILE)                       # 136 tickers
+everything = load_stock_data(FilePaths.DATA_FILE, include_excluded=True)  # 141
+```
+
+`attach_status` adds a `Status` column (`active` / `acquired`) so rows can be told
+apart once loaded.
+
+### Pre-acquisition profiles
+
+`core/acquisitions.py` lines each acquired ticker's quarters up on its
+**announcement** date — quarter `0` is the last report before the market learned,
+negative offsets are earlier, positive ones are reports filed while the deal was
+pending.
+
+```bash
+python scripts/acquisition_profile.py                  # deal summary + run-up
+python scripts/acquisition_profile.py --metric EPS_TTM # align a different metric
+python scripts/acquisition_profile.py --ticker EA      # one ticker's full history
+```
+
+The P/E multiple aligned across deals shows how differently they arrive:
+
+| Quarters to announcement | EA | JWN | SKX |
+|---|---|---|---|
+| −8 | 18.2 | 8.6 | 19.7 |
+| −4 | 20.6 | 9.8 | 18.1 |
+| −1 | 21.5 | 11.8 | 13.5 |
+| **0** | **27.7** | **11.9** | **14.9** |
+| +1 | 36.2 | 11.2 | 15.6 |
+
+EA re-rated upward into its buyout, Nordstrom was cheap throughout, and Skechers
+was compressing. Sprint is omitted here because its near-zero earnings make the
+multiple meaningless.
+
+`deal_price_vs_last_report_pct` is deliberately **not** called a premium: it
+compares the deal price against the share price at the last report, which can be a
+quarter stale, so an anticipated deal is already partly in the stock. Skechers
+computes to +0.5% against an announced move of roughly 24%.
+
+To bring a ticker back into the active universe, set `exclude_from_active` to
+`false` — no re-index needed, since `StockData_Indexed.xlsx` still contains all
+141 tickers.
 
 ## Project Structure
 
@@ -398,6 +454,7 @@ StockInsights/
 │   └── quotes/                   # Optional price data directory
 │
 ├── config/                        # Configuration files
+│   ├── ticker_status.json            # Active vs acquired, and holds
 │   └── ticker_strategy_mapping.json  # Research artifact; not read by predictions
 │
 ├── requirements.txt              # Production dependencies
@@ -644,7 +701,7 @@ with nothing to fit. The dashboard shows an info message rather than failing.
 
 ### A ticker is missing entirely
 
-Check `config/excluded_tickers.json` — see [Excluded Tickers](#excluded-tickers).
+Check `config/ticker_status.json` — see [Ticker Status](#ticker-status-active-vs-acquired).
 The dashboard also prints an `st.info` naming everything it dropped at load.
 
 ### File not found errors

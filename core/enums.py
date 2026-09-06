@@ -248,6 +248,9 @@ class Column(str, Enum):
     SECTOR = "Sector"
     INDUSTRY = "Industry"
     SUB_INDUSTRY = "Sub_Industry"
+    # active | acquired -- see core/ticker_status.py. Acquired tickers are kept
+    # in the data for pre-acquisition profiling, so rows need a marker.
+    STATUS = "Status"
 
     @classmethod
     def required_columns(cls) -> list[str]:

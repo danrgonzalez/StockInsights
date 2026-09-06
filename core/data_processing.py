@@ -92,6 +92,7 @@ def report_range(reports: pd.Series) -> tuple[str | None, str | None]:
 
 def load_stock_data_with_stats(
     file_path: str,
+    include_excluded: bool = False,
 ) -> tuple[pd.DataFrame | None, dict]:
     """
     Load and clean stock data, reporting what was dropped along the way.
@@ -102,6 +103,9 @@ def load_stock_data_with_stats(
 
     Args:
         file_path: Path to the Excel file
+        include_excluded: Keep tickers held out of the active universe --
+            acquired companies and data-quality holds. Off by default so the
+            active analysis is unaffected; on for acquisition profiling.
 
     Returns:
         (DataFrame or None, stats) where stats carries ``duplicates_dropped``
@@ -149,11 +153,18 @@ def load_stock_data_with_stats(
             df = df.drop_duplicates(subset=[ticker_col, report_col], keep="last")
             stats["duplicates_dropped"] = before - len(df)
 
-        # Drop tickers flagged in config/excluded_tickers.json
-        from core.exclusions import filter_excluded
+        # Mark lifecycle status, then drop anything held out of the active
+        # universe. Acquired tickers are excluded by default but retained when
+        # include_excluded is set, so their final quarters stay available for
+        # pre-acquisition profiling.
+        from core.ticker_status import attach_status, filter_excluded
 
-        df, dropped = filter_excluded(df)
-        stats["excluded"] = dropped
+        df = attach_status(df)
+        if include_excluded:
+            stats["excluded"] = {}
+        else:
+            df, dropped = filter_excluded(df)
+            stats["excluded"] = dropped
 
         return df, stats
     except FileNotFoundError:
@@ -164,17 +175,20 @@ def load_stock_data_with_stats(
         return None, stats
 
 
-def load_stock_data(file_path: str) -> pd.DataFrame | None:
+def load_stock_data(
+    file_path: str, include_excluded: bool = False
+) -> pd.DataFrame | None:
     """
     Load and clean stock data from an Excel file.
 
     Args:
         file_path: Path to the Excel file
+        include_excluded: Keep acquired tickers and data-quality holds
 
     Returns:
         Cleaned DataFrame or None if loading fails
     """
-    df, _ = load_stock_data_with_stats(file_path)
+    df, _ = load_stock_data_with_stats(file_path, include_excluded=include_excluded)
     return df
 
 

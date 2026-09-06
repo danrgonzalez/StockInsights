@@ -23,31 +23,22 @@ bridge a 2.5-year hole and its `Index` alignment is off by 10 quarters.
 
 ### 17. Three tickers have no real earnings dates
 `JWN`, `S`, `SKX` (149 rows) — all dates are estimates from the modal fiscal
-convention, p90 error ~214 days, potentially a full quarter off. All three are also
-delisted/acquired and currently excluded.
+convention, p90 error ~214 days, potentially a full quarter off.
 
-- [ ] Supply one real earnings date each (pulls them to ~4-day accuracy), or drop
-      the tickers permanently.
+**Do not drop them.** As of 2026-09-06 all three are confirmed acquisitions and are
+deliberately retained as pre-acquisition profiles (see `config/ticker_status.json`).
+They are held out of the active universe, so the weak dates do not affect any
+current analysis — but they do blur where each company sits relative to its
+announcement date in `core/acquisitions.py`.
+
+- [ ] Supply one real earnings date each, which pulls the whole ticker to ~4-day
+      accuracy and sharpens its acquisition profile.
 
 ### 18. BABA has one suspect earnings date
 Rows 783-784 are 55 days apart (`2026-03-19` -> `2026-05-13`); every other spacing in
 the file is 84-112. Financials are sound, so BABA is **not** excluded.
 
 - [ ] Confirm whether `2026-03-19` should be ~`2026-02-19`.
-
-### 19. EA is being acquired — trigger may now be met
-The sheet carries a `Buyout` note at Q2'26.
-
-Checked 2026-09-06: the workbook's leading edge is **2026-09-03** and 126 of 137
-tickers reported within 60 days of it, so the file is current. **EA's last report is
-`Q4'26` on 2026-05-05, 121 days behind** — it has missed roughly one quarterly cycle
-(EA's fiscal Q1 normally reports in early August).
-
-Suggestive, not conclusive: `BK` is 140 days behind with no buyout, so the workbook
-has gaps for other reasons too.
-
-- [ ] Check whether EA filed a Q1'27 report in August 2026. If it did, add the row.
-      If it did not, set `"exclude": true` in `config/excluded_tickers.json`.
 
 ### 20. 8,268 of 8,653 earnings dates are estimates
 Generated 2026-09-02 at 91.3125 days/quarter with per-ticker, per-fiscal-quarter
@@ -56,6 +47,47 @@ within two weeks. Long-range extrapolation is structurally sound but unverifiabl
 
 - [ ] Treat as approximations, never as reportable facts. Re-run the fit (don't patch)
       whenever real dates are added.
+
+---
+
+## Done — 2026-09-06
+
+- [x] **Item 19 — EA's trigger confirmed and acted on.** Researched every ticker
+      that had stopped reporting. **Four confirmed acquisitions**, now separated from
+      the active universe but kept for profiling:
+
+      | Ticker | Acquirer | Announced | Completed |
+      |--------|----------|-----------|-----------|
+      | `S` | T-Mobile (all-stock merger) | 2018-04-29 | 2020-04-01 |
+      | `JWN` | Nordstrom family + El Puerto de Liverpool, $24.25/sh | 2024-12-23 | 2025-05-20 |
+      | `SKX` | 3G Capital, $9.42B, $63/sh | 2025-05-05 | 2025-09-12 |
+      | `EA` | PIF + Silver Lake + Affinity, $55B, $210/sh | 2025-09-29 | 2026-08-04 |
+
+      **Two false positives**, both worth knowing: `BK` is still public — BNY
+      reported Q2'26 on 2026-07-15, so its 140-day gap is a **missing row**, and the
+      company rebranded to BNY with a possible ticker change. `HAIN` is not acquired
+      either, but carries a sub-$1.00 Nasdaq bid-price warning and a planned reverse
+      split. Both added to `ticker_status.json` as watch entries.
+
+- [x] **Ticker status model.** `config/excluded_tickers.json` ->
+      `config/ticker_status.json`, splitting one flag into two ideas: `status`
+      (`active` / `acquired`, a fact about the company) and `exclude_from_active`
+      (whether to drop it from the analysis universe). `core/exclusions.py` ->
+      `core/ticker_status.py` with `get_acquired_tickers`, `get_ticker_status`,
+      `get_acquisition` and `attach_status`, which adds a `Status` column.
+      `load_stock_data(..., include_excluded=True)` returns acquired tickers for
+      profiling; the default is unchanged, so active analysis is unaffected beyond
+      EA now being held out (137 -> 136 tickers).
+
+- [x] **Pre-acquisition profiling.** `core/acquisitions.py` aligns each acquired
+      ticker's quarters on its **announcement** date — quarter 0 is the last report
+      before the market learned. `scripts/acquisition_profile.py` prints the deal
+      summary, the run-up, and any metric aligned across deals. The P/E multiple
+      shows they arrive very differently: EA re-rated up into its buyout
+      (18.2 -> 27.7 at announcement -> 36.2 pending), JWN was cheap throughout
+      (8.6 -> 11.9), SKX was compressing (19.7 -> 14.9). `deal_price_vs_last_report_pct`
+      is deliberately not called a premium — the last report can be a quarter stale,
+      so SKX computes to +0.5% against an announced move of ~24%.
 
 ---
 

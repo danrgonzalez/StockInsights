@@ -17,9 +17,9 @@
     },
     "BRK/B": {
       "status": "active",
-      "exclude_from_active": true,
-      "reason": "10 quarters missing from the source data (Q2'17-Q3'19). Rows are treated as consecutive, so TTM and QoQ silently bridge a 2.5-year hole and Index alignment is off by 10 quarters vs every other ticker.",
-      "resolution": "Backfill the 10 missing quarters, then set exclude_from_active=false. Do NOT relabel the Report column to close the gap - the existing labels are correct."
+      "exclude_from_active": false,
+      "reason": "Resolved 2026-09-06. The 10 missing quarters (Q2'17-Q3'19) were backfilled from SEC XBRL: revenue reconciles exactly to Berkshire's reported annual totals for 2017, 2018 and 2019, and EPS (operating earnings per equivalent Class B share) lands within 0.02 of the reported figure each year. Index alignment now matches every other ticker.",
+      "resolution": "Back in the active universe. Note Q2'16 (2.03) and Q3'16 (2.92) still look high against Berkshire's reported operating earnings of $4,610M and $4,850M, which imply 1.87 and 1.97."
     },
     "EA": {
       "status": "acquired",

@@ -521,10 +521,18 @@ class TestTickerStatus:
     def test_acquired_ticker_reports_its_status(self):
         assert get_ticker_status("EA") == STATUS_ACQUIRED
 
-    def test_data_quality_holds_stay_active_companies(self):
-        """BRK/B is excluded for missing quarters, but it was not acquired."""
+    def test_a_hold_is_independent_of_acquisition_status(self):
+        """The two flags are separate: a held-back ticker is still an active
+        company, and being active says nothing about being held back."""
+        held_but_active = get_excluded_tickers() - get_acquired_tickers()
+        for ticker in held_but_active:
+            assert get_ticker_status(ticker) == STATUS_ACTIVE
+            assert get_acquisition(ticker) is None
+
+    def test_brk_b_is_active_and_no_longer_held_back(self):
+        """Its 10 missing quarters were backfilled on 2026-09-06."""
         assert get_ticker_status("BRK.B") == STATUS_ACTIVE
-        assert "BRK.B" in get_excluded_tickers()
+        assert "BRK.B" not in get_excluded_tickers()
 
     def test_acquisition_details_are_present(self):
         details = get_acquisition("EA")

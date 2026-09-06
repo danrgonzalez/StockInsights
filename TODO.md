@@ -10,17 +10,6 @@ bug with visible impact · P3 quality/maintainability · P4 data sourcing.
 
 ## P4 — Data sourcing
 
-### 16. BRK/B is missing 10 real quarters
-`Q1'17` jumps straight to `Q4'19` (Q2'17-Q3'19 absent). The labels are **correct** —
-4-quarter revenue sums reconcile to Berkshire's reported annual revenue within
-~$1,000M (FY13 exact, FY16 exact). Relabeling to close the gap makes those sums
-$29-43B/yr short, so **do not "fix" it by relabeling.**
-
-Currently excluded via `config/excluded_tickers.json`. While unfixed, its TTM and QoQ
-bridge a 2.5-year hole and its `Index` alignment is off by 10 quarters.
-
-- [ ] Backfill Q2'17-Q3'19, then set `"exclude": false`.
-
 ### 17. Three tickers have no real earnings dates
 `JWN`, `S`, `SKX` (149 rows) — all dates are estimates from the modal fiscal
 convention, p90 error ~214 days, potentially a full quarter off.
@@ -34,12 +23,6 @@ announcement date in `core/acquisitions.py`.
 - [ ] Supply one real earnings date each, which pulls the whole ticker to ~4-day
       accuracy and sharpens its acquisition profile.
 
-### 18. BABA has one suspect earnings date
-Rows 783-784 are 55 days apart (`2026-03-19` -> `2026-05-13`); every other spacing in
-the file is 84-112. Financials are sound, so BABA is **not** excluded.
-
-- [ ] Confirm whether `2026-03-19` should be ~`2026-02-19`.
-
 ### 20. 8,268 of 8,653 earnings dates are estimates
 Generated 2026-09-02 at 91.3125 days/quarter with per-ticker, per-fiscal-quarter
 offsets. Leave-one-out accuracy on the 383 real dates: median 4 days, p90 13, 91%
@@ -47,10 +30,42 @@ within two weeks. Long-range extrapolation is structurally sound but unverifiabl
 
 - [ ] Treat as approximations, never as reportable facts. Re-run the fit (don't patch)
       whenever real dates are added.
+- [ ] **The fit script does not exist in the repo.** The 2026-09-02 backfill was a
+      one-off that was never committed, so "re-run the fit" cannot currently be
+      followed. Write it before adding real dates (blocks item 17).
 
 ---
 
 ## Done — 2026-09-06
+
+- [x] **Item 16 — BRK/B's 10 missing quarters backfilled; back in the active
+      universe.** Q2'17-Q3'19 filled from SEC XBRL. Revenue reconciles **exactly** to
+      Berkshire's reported annual totals (2017: 242,137 · 2018: 247,837 · 2019:
+      254,616, all diff +0), and both quarters already in the file matched XBRL
+      exactly, which confirmed the source. EPS is operating earnings per equivalent
+      Class B share — Berkshire's own definition, "net earnings exclusive of
+      investment and derivative gains/losses" — and each year lands within 0.02 of
+      the reported figure. Dates are real SEC filing dates. Index alignment now
+      matches every other ticker (141 of 141 share the panel's max index), and the
+      2.5-year hole in TTM/QoQ is gone. `exclude_from_active` set to false: the
+      active universe is **137 tickers**.
+- [x] **Item 18 — BABA verified correct, no change.** The 55-day gap is real:
+      Alibaba announced its December 2025 quarter unusually late on **2026-03-19**,
+      then the March quarter and full year on **2026-05-13**. Both confirmed against
+      Alibaba's own announcements. The suspicion was wrong.
+- [x] **BNY's missing Q2'26 row** added (reported 2026-07-15, EPS $2.45, revenue
+      $5,698M from the earnings release), and the ticker renamed from `BK`.
+
+### Price column: convention identified
+
+Worth recording because it is easy to misread. **`Price` is the mean daily close
+from a row's report date to the *next* report date** — a forward-looking quarterly
+average, not a closing price. Verified across 84 quarters and 6 tickers: mean error
+**0.35%**, median 0.15%. For a ticker's latest row there is no next report, so the
+window runs to the present, which is what the indexer's SimpleMovingAvg step fills.
+
+Anyone checking this column against a report-date close will conclude it is wrong;
+it is not.
 
 - [x] **Item 19 — EA's trigger confirmed and acted on.** Researched every ticker
       that had stopped reporting. **Four confirmed acquisitions**, now separated from

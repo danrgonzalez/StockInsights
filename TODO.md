@@ -50,45 +50,33 @@ within two weeks. Long-range extrapolation is structurally sound but unverifiabl
 
 ---
 
-## Local environment — git tooling
-
-Machine-level issues, not repo issues. They blocked the 2026-09-02 push to origin and
-will keep causing trouble until fixed.
-
-### 25. SSH key is not registered with GitHub — needs one action from you
-Re-checked 2026-09-05. Diagnosis confirmed and narrowed: the private key
-`~/.ssh/id_rsa` (RSA 4096, created 2017-04-11,
-`SHA256:7WdzGyVzN/jvq5PRPv92+NcpvVEijeTiW41e56hm5ss`) **is** loaded and offered to
-GitHub — `ssh -v` shows it — and GitHub rejects it, so nothing is wrong with the key
-or the ssh setup. It simply is not on the account. RSA-4096 is still accepted by
-GitHub (only DSA and unsigned RSA-SHA1 were removed), so this key would work as-is.
-
-**This is now optional, not blocking.** Item 26 registered `gh` as git's credential
-helper, so a plain `git push` works over https; SSH would only matter if the remote
-were switched to `git@github.com:`. The remote is currently
-`https://github.com/danrgonzalez/StockInsights.git`.
-
-I cannot complete this: adding a key needs the `admin:public_key` scope, and the
-token has only `gist`, `read:org`, `repo`, `workflow`. Granting it needs an
-interactive browser flow.
-
-Pick one:
-- [ ] **Paste it** (fastest). The key is already on your clipboard; add it at
-      https://github.com/settings/keys. Then verify with
-      `ssh -T git@github.com` — expect "Hi danrgonzalez! You've successfully
-      authenticated".
-- [ ] **Let gh do it.** Run `gh auth refresh -h github.com -s admin:public_key`
-      yourself, then I can run `gh ssh-key add ~/.ssh/id_rsa.pub`.
-- [ ] **Drop it** and stay on https via `gh`, which works today. If so, delete this
-      item.
-
-Worth considering either way: the key is 9 years old and RSA. `ssh-keygen -t ed25519`
-would be the modern replacement, but that is a new credential, so I have not created
-one unasked.
-
 ---
 
 ## Done — 2026-09-05
+
+- [x] **Item 25 — resolved 2026-09-06 with a new key.** SSH to GitHub now
+      authenticates: `Server accepts key ... ED25519
+      SHA256:0BzNf1tt10HKt++7ZtkrGEwthTcDbTDXkwAf2Z8T1pc`.
+
+      **The original diagnosis was wrong, and so was mine.** `~/.ssh/id_rsa` is
+      **passphrase-protected**, and the passphrase is lost. Every check of this item —
+      2026-09-02's and my first one — used `ssh -o BatchMode=yes`, which suppresses
+      the passphrase prompt, so ssh could never decrypt the key and never offered it.
+      The resulting `Permission denied (publickey)` meant "no usable key available",
+      not "GitHub rejected this key". **Whether the 2017 RSA key was ever registered
+      on the account is unknowable now.** If you ever re-check an SSH key, drop
+      `BatchMode` or the answer will be misleading.
+
+      Resolution: generated `~/.ssh/id_ed25519` (no passphrase, perms 0600), added a
+      `Host github.com` block to `~/.ssh/config` with `IdentitiesOnly yes` — needed so
+      ssh does not try the undecryptable RSA key first and prompt — and the key was
+      added to the GitHub account. `~/.ssh/id_rsa` was deliberately left in place:
+      `~/.gitconfig` references Azure DevOps and AWS CodeCommit, so it may still be
+      registered elsewhere, though without its passphrase it is unusable.
+
+      The remote is still `https://`, which works via `gh` (item 26). Switch with
+      `git remote set-url origin git@github.com:danrgonzalez/StockInsights.git` if you
+      want pushes to go over SSH.
 
 - [x] **Item 21 — decided: retire per-ticker selection, use one global default.**
       Tested properly rather than assumed: the strategy was chosen on one 8-quarter

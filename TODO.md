@@ -8,35 +8,50 @@ bug with visible impact · P3 quality/maintainability · P4 data sourcing.
 
 ---
 
-## P4 — Data sourcing
-
-### 17. Three tickers have no real earnings dates
-`JWN`, `S`, `SKX` (149 rows) — all dates are estimates from the modal fiscal
-convention, p90 error ~214 days, potentially a full quarter off.
-
-**Do not drop them.** As of 2026-09-06 all three are confirmed acquisitions and are
-deliberately retained as pre-acquisition profiles (see `config/ticker_status.json`).
-They are held out of the active universe, so the weak dates do not affect any
-current analysis — but they do blur where each company sits relative to its
-announcement date in `core/acquisitions.py`.
-
-- [ ] Supply one real earnings date each, which pulls the whole ticker to ~4-day
-      accuracy and sharpens its acquisition profile.
-
-### 20. 8,268 of 8,653 earnings dates are estimates
-Generated 2026-09-02 at 91.3125 days/quarter with per-ticker, per-fiscal-quarter
-offsets. Leave-one-out accuracy on the 383 real dates: median 4 days, p90 13, 91%
-within two weeks. Long-range extrapolation is structurally sound but unverifiable.
-
-- [ ] Treat as approximations, never as reportable facts. Re-run the fit (don't patch)
-      whenever real dates are added.
-- [ ] **The fit script does not exist in the repo.** The 2026-09-02 backfill was a
-      one-off that was never committed, so "re-run the fit" cannot currently be
-      followed. Write it before adding real dates (blocks item 17).
-
----
-
 ## Done — 2026-09-06
+
+- [x] **Items 17 + 20 — earnings dates are now real, not modelled.** The column was
+      ~95% synthetic and the 383 real dates it was seeded from were no longer
+      distinguishable in the file, so there was nothing left to anchor on. Two
+      scripts replace it.
+
+      `scripts/fetch_earnings_dates.py` pulls dates from SEC EDGAR into
+      `config/earnings_dates.json`. It prefers the **8-K carrying item 2.02**
+      ("Results of Operations"), which *is* the earnings release, and falls back to
+      the 10-Q/10-K filing date. That distinction matters: measured against filing
+      dates BNY looked 22.5 days off, but against its own 8-Ks it is 2.0 — the gap
+      was the announce-to-file lag, not model error.
+
+      `scripts/fit_earnings_dates.py` models only what EDGAR cannot supply, and
+      prints **leave-one-out accuracy on every run** instead of quoting a number
+      measured once.
+
+      | | before | now |
+      |---|---|---|
+      | real dates | 383 (5%) | **8,617 (99.4%)** |
+      | modelled | 8,268 | 50 |
+      | LOO median error | 4d | **2.0d** |
+      | LOO p90 | 13d | **5.6d** |
+      | within 14 days | 91% | **99.2%** |
+
+      **Item 17 is fully resolved**: `JWN` 56/56, `S` 35/35 and `SKX` 58/58 now carry
+      real 8-K dates, so their ~214-day p90 error is gone. Every date records its
+      source, so any figure traces back to a filing.
+
+      Three traps, all handled in `CIK_OVERRIDES` / `CIK_PREDECESSORS`:
+      - **A retired ticker can be reissued.** SEC's ticker file resolves `S` to
+        SentinelOne; Sprint's CIK (101830) is pinned explicitly, and the dates
+        fetched run 2011-2019, ending at Sprint's last report before the merger.
+      - **A reorganisation splits a company across CIKs.** XOM, GOOGL, DIS, AVGO,
+        BLK and MDT each keep older filings under a predecessor CIK — XOM went from
+        1/62 quarters to 62/62 once both were merged.
+      - **Foreign issuers (BABA, BIDU) file 6-K/20-F**, which carry no item codes,
+        so an earnings 6-K cannot be told from any other announcement. Those 109
+        dates are proximity-matched and labelled "weaker" in the registry.
+
+      The 50 still modelled are quarters that cannot exist on EDGAR: pre-IPO for
+      META, WDAY, GPRO and BABA, and either side of the ETN and AVGO
+      reorganisations.
 
 - [x] **Item 16 — BRK/B's 10 missing quarters backfilled; back in the active
       universe.** Q2'17-Q3'19 filled from SEC XBRL. Revenue reconciles **exactly** to

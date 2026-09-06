@@ -486,6 +486,11 @@ pre-commit install
 
 ## Getting the Data
 
+> For a map of every input, output and entry point in the pipeline — and the two
+> provenance traps that are not visible in the data itself — see
+> [PIPELINE.md](PIPELINE.md).
+
+
 **The data files are deliberately not in this repository.** `.gitignore` excludes
 `*.xlsx` and `*.csv`, so a fresh clone has no `data/` directory and nothing will
 run until you supply one. This keeps the repo small and avoids committing a
